@@ -1,14 +1,24 @@
 import json
 from sqlalchemy import create_engine, Column, String, Integer, ForeignKey, DateTime, Date, Boolean, UniqueConstraint
 from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker, relationship
+from sqlalchemy.orm import sessionmaker, relationship, scoped_session
 from sqlalchemy_utils import ChoiceType
 
 from settings import DB_PATH, USER_FILE
 
 engine = create_engine(f'sqlite:///{DB_PATH}', echo=__name__ == '__main__')
-Session = sessionmaker(bind=engine)
+# Session = sessionmaker(bind=engine)
+session_factory = sessionmaker(bind=engine)
+Session = scoped_session(session_factory)
 Base = declarative_base()
+
+
+# types
+info = 'info'
+categorical = 'categorical'
+photo = 'photo'
+location = 'location'
+text = 'text'
 
 
 class Survey(Base):
@@ -25,10 +35,11 @@ class Questionnaire(Base):
 
 	id = Column(Integer, primary_key=True)
 	name = Column(String(64), nullable=False)
+	description = Column(String(256), nullable=True)
 	version = Column(Integer, nullable=False)
 	is_available = Column(Boolean, nullable=False, default=False)
 
-	questions = relationship('Question', back_populates='questionnaire', cascade='all, delete, delete-orphan')
+	questions = relationship('Question', back_populates='questionnaire', cascade='all, delete, delete-orphan', order_by='Question.id')
 	surveys = relationship('Survey', back_populates='questionnaire')
 
 
@@ -36,10 +47,11 @@ class Question(Base):
 	__tablename__ = 'questions'
 
 	TYPES = [
-		('info', 'info'),
-		('categorical', 'categorical'),
-		('photo', 'photo'),
-		('location', 'location'),
+		(info, info),
+		(categorical, categorical),
+		(photo, photo),
+		(location, location),
+		(text, text),
 	]
 
 	id = Column(Integer, primary_key=True)
@@ -65,7 +77,7 @@ class Category(Base):
 
 	id = Column(Integer, primary_key=True)
 	text = Column(String(256), nullable=False)
-	code = Column(Integer, nullable=False, default=1, autoincrement=True)
+	code = Column(String(64), nullable=False)
 
 	question_id = Column(Integer, ForeignKey('questions.id'), nullable=False)
 	question = relationship('Question', back_populates='categories')

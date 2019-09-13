@@ -1,6 +1,7 @@
 import json
 from pathlib import Path
 
+
 ROOT_DIR = Path(__file__).parent.absolute()
 DB_PATH = Path.joinpath(ROOT_DIR, 'my_db.sqlite')
 
@@ -8,7 +9,6 @@ API_TOKEN = open(Path(ROOT_DIR, 'cert', 'token.txt'), 'r').read()
 WEBHOOK_CONF = json.load(open(Path(ROOT_DIR, 'cert', 'webhook_conf.json'), 'r'))
 WEBHOOK_HOST = WEBHOOK_CONF['host']
 WEBHOOK_PORT = WEBHOOK_CONF['port']  # 443, 80, 88 or 8443 (port need to be 'open')
-# WEBHOOK_LISTEN = '192.168.1.100'  # In some VPS you may need to put here the IP addr
 WEBHOOK_LISTEN = WEBHOOK_CONF['listen']  # In some VPS you may need to put here the IP addr
 
 WEBHOOK_SSL_CERT = Path(ROOT_DIR, 'cert', 'webhook_cert.pem')  # Path to the ssl certificate
@@ -26,10 +26,9 @@ WEBHOOK_URL_BASE = "https://{}:{}".format(WEBHOOK_HOST, WEBHOOK_PORT)
 WEBHOOK_URL_PATH = "/{}/".format(API_TOKEN)
 
 
-
-# tmp
-USER_FILE = Path(ROOT_DIR, 'users.json')
-
 PROXY = {'https': 'socks5h://127.0.0.1:9150'}
 
 
+# tmp
+USER_FILE = Path(ROOT_DIR, 'tmp', 'users.json')
+TMP_FILE = Path(ROOT_DIR, 'tmp', 'tmp.json')

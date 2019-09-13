@@ -1,0 +1,13 @@
+/.idea/
+/.handler-saves/
+/venv/
+/cert/*
+/photos/*
+
+*.log
+*.sqlite
+
+/tmp/
+
+tmp/tmp.json
+tmp/users.json

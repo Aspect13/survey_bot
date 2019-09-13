@@ -1,12 +1,6 @@
-import json
-
-import telebot
 from telebot import types
 
-from models import User
-from settings import API_TOKEN
-from utils import get_distance
-from webhook import bot, run_polling
+from tg_bot.webhook import bot, run_polling
 
 # markup_yes_no = types.ReplyKeyboardMarkup(one_time_keyboard=True)
 markup_yes_no = types.InlineKeyboardMarkup()

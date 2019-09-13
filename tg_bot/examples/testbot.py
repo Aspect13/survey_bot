@@ -1,8 +1,8 @@
 from telebot import types
 
-from models import User
+from survey.models import User
 from utils import get_distance
-from webhook import bot, run_polling
+from tg_bot.webhook import bot, run_polling
 
 
 # telebot.apihelper.proxy = {'https': 'socks5h://127.0.0.1:9150'}
