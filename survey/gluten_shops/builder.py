@@ -1,5 +1,5 @@
 from survey.gluten_shops.settings import save
-from survey.models import Question, Category, location, photo, categorical, info
+from survey.models import Question, Category, location, photo, categorical, info, text
 
 
 #
