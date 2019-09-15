@@ -45,6 +45,7 @@ class Questionnaire(Base):
 
 class Question(Base):
 	__tablename__ = 'questions'
+	__table_args__ = (UniqueConstraint('text', 'questionnaire_id', name='uc_1'),)
 
 	TYPES = [
 		(info, info),
@@ -56,16 +57,36 @@ class Question(Base):
 
 	id = Column(Integer, primary_key=True)
 	code = Column(String(64), nullable=False, unique=True)
-	text = Column(String(512), nullable=False, unique=True)
+	text = Column(String(512), nullable=False,)
 	type = Column(ChoiceType(TYPES))
 	save_in_survey = Column(Boolean, nullable=False, default=True)
 
-	categories = relationship('Category', back_populates='question', cascade='all, delete, delete-orphan')
+	categories = relationship('Category', back_populates='question', cascade='all, delete, delete-orphan',)
 
 	route_step = relationship('Route', back_populates='question', uselist=False, cascade='all, delete, delete-orphan')
 
 	questionnaire_id = Column(Integer, ForeignKey('questionnaires.id'), nullable=False)
 	questionnaire = relationship('Questionnaire', back_populates='questions')
+
+
+
+	def set_filter(self, categories=None, func=None, persist=True):
+		if not self.original_categories:
+			self.original_categories = self.categories
+		if categories:
+			print(categories)
+			self.set_filter(func=lambda cat: cat.code in [i.code if isinstance(i, Category) else str(i) for i in categories], persist=persist)
+		if persist:
+			self.categories = list(filter(func, self.original_categories))
+		return list(filter(func, self.original_categories))
+
+	def format_text(self, *args, **kwargs):
+		return self.text.format(*args, **kwargs)
+
+	# def contains(self, categories):
+	# 	print(self.categories)
+	# 	print(categories)
+	# 	return lambda: cat.code in [j.code for j in categories]
 
 	def __repr__(self):
 		return f'<Question code={self.code} text={self.text[:10]}... {self.route_step}>'
@@ -81,6 +102,9 @@ class Category(Base):
 
 	question_id = Column(Integer, ForeignKey('questions.id'), nullable=False)
 	question = relationship('Question', back_populates='categories')
+
+	def __repr__(self):
+		return f'<Category {self.code}: {self.text}>'
 
 
 class Route(Base):

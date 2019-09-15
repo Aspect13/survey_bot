@@ -32,3 +32,10 @@ PROXY = {'https': 'socks5h://127.0.0.1:9150'}
 # tmp
 USER_FILE = Path(ROOT_DIR, 'tmp', 'users.json')
 TMP_FILE = Path(ROOT_DIR, 'tmp', 'tmp.json')
+
+
+# bot core
+SLEEP_AFTER_INFO = 3
+
+# routing
+CACHE_QUERIES = False
