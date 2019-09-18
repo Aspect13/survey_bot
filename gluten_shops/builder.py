@@ -4,10 +4,10 @@ from operator import and_
 
 from sqlalchemy.exc import IntegrityError
 
-QUESTIONNAIRE_VERSION = 2
+QUESTIONNAIRE_VERSION = 1
 QUESTIONNAIRE_NAME = 'gluten_shops'
 QUESTIONNAIRE_DESCRIPTION = 'Исследование магазинов с безглютеновой продукцией'
-ROUTE_VERSION = 2
+ROUTE_VERSION = QUESTIONNAIRE_VERSION
 ROUTE_STEP = 1
 CATEGORY_CODE_START = 1
 ALLOW_OVERWRITE = True
@@ -41,7 +41,7 @@ def save(q):
 	q.save_in_survey = q.type != 'info'
 	category_code = CATEGORY_CODE_START
 	for i in q.categories:
-		i.code = category_code
+		i.code = i.code if i.code else category_code
 		session.add(i)
 		category_code += 1
 	session.add(q)
@@ -82,7 +82,11 @@ def save(q):
 # Here go questions:
 #
 #
-
+q = Question()
+q.code = 'q0'
+q.type = info
+q.text = 'This is q0. A start of everything. Literally...'
+save(q)
 
 q = Question()
 q.code = 'q1'
@@ -97,6 +101,21 @@ q.text = 'Нажми на кнопку, чтобы отправить геоло
 cats = [Category(text='Отправить местоположение'), ]
 q.categories = cats
 save(q)
+
+q = Question()
+q.code = 'qq2'
+q.type = categorical
+q.text = 'Kukusiki'
+cats = [
+	Category(text='Mur', code='MAAAU'),
+	Category(text='Miu'),
+	Category(text='MAU'),
+	Category(text='RRRRRR'),
+]
+q.categories = cats
+save(q)
+
+
 
 q = Question()
 q.code = 'q3'
@@ -129,3 +148,7 @@ cats = [
 ]
 q.categories = cats
 save(q)
+
+
+
+print('Success!!!')

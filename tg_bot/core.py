@@ -2,7 +2,7 @@ import time
 
 from settings import SLEEP_AFTER_INFO
 from survey.models import Session, info, Route, Question, location, categorical
-from tg_bot.utils import bot, run_polling, logger, get_markup, DataCheckError
+from tg_bot.tg_bot_utils import bot, run_polling, logger, get_markup, DataCheckError
 from utils import get_distance
 
 
@@ -70,7 +70,10 @@ def handle_answer(message, *args, **kwargs):
 	if not question:
 		terminate(message)
 
-	bot.send_message(message.chat.id, f'Question: {question.code}, step: {question.route_step.step}, START')
+	try:
+		bot.send_message(message.chat.id, f'Question: {question.code}, step: {question.route_step.step}, START')
+	except AttributeError:
+		terminate(message)
 
 	# before_question_ask(question, message)
 

@@ -13,13 +13,6 @@ Session = scoped_session(session_factory)
 Base = declarative_base()
 
 
-# types
-info = 'info'
-categorical = 'categorical'
-photo = 'photo'
-location = 'location'
-text = 'text'
-
 
 class Survey(Base):
 	__tablename__ = 'surveys'
@@ -45,21 +38,32 @@ class Questionnaire(Base):
 
 class Question(Base):
 	__tablename__ = 'questions'
-	__table_args__ = (UniqueConstraint('text', 'questionnaire_id', name='uc_1'),)
+	__table_args__ = (
+		UniqueConstraint('questionnaire_id', 'code', name='uc_1'),
+		UniqueConstraint('step', 'code', name='uc_2'),
+	)
 
-	TYPES = [
-		(info, info),
-		(categorical, categorical),
-		(photo, photo),
-		(location, location),
-		(text, text),
-	]
+	# TYPES = [
+	# 	(question_types['info'], question_types['info']),
+	# 	(question_types['categorical'], question_types['categorical']),
+	# 	(question_types['photo'], question_types['photo']),
+	# 	(question_types['location'], question_types['location']),
+	# 	(question_types['text'], question_types['text']),
+	# ]
+	TYPES = {
+		'info': 'info',
+		'categorical': 'categorical',
+		'photo': 'photo',
+		'location': 'location',
+		'text': 'text',
+	}
 
 	id = Column(Integer, primary_key=True)
-	code = Column(String(64), nullable=False, unique=True)
+	code = Column(String(64), nullable=False)
 	text = Column(String(512), nullable=False,)
 	type = Column(ChoiceType(TYPES))
 	save_in_survey = Column(Boolean, nullable=False, default=True)
+	step = Column(Integer,)
 
 	categories = relationship('Category', back_populates='question', cascade='all, delete, delete-orphan',)
 
@@ -68,13 +72,13 @@ class Question(Base):
 	questionnaire_id = Column(Integer, ForeignKey('questionnaires.id'), nullable=False)
 	questionnaire = relationship('Questionnaire', back_populates='questions')
 
-
+	# original_categories = None
 
 	def set_filter(self, categories=None, func=None, persist=True):
 		if not self.original_categories:
 			self.original_categories = self.categories
 		if categories:
-			print(categories)
+			# print(categories)
 			self.set_filter(func=lambda cat: cat.code in [i.code if isinstance(i, Category) else str(i) for i in categories], persist=persist)
 		if persist:
 			self.categories = list(filter(func, self.original_categories))
@@ -107,23 +111,32 @@ class Category(Base):
 		return f'<Category {self.code}: {self.text}>'
 
 
-class Route(Base):
-	__tablename__ = 'routes'
-	__table_args__ = (UniqueConstraint('version', 'step', name='uc_1'), )
+# class Route(Base):
+# 	__tablename__ = 'routes'
+# 	__table_args__ = (UniqueConstraint('version', 'step', name='uc_1'), )
+#
+# 	id = Column(Integer, primary_key=True)
+# 	version = Column(Integer, nullable=False)
+# 	step = Column(Integer, nullable=False)
+# 	question_id = Column(Integer, ForeignKey('questions.id'), nullable=False)
+# 	question = relationship('Question', back_populates='route_step')
+	# def __repr__(self):
+	# 	return f'step={self.step}'
+
+
+
+
+
+
+
+
+class Interviewer(Base):
+	__tablename__ = 'interviewers'
 
 	id = Column(Integer, primary_key=True)
-	version = Column(Integer, nullable=False)
-	step = Column(Integer, nullable=False)
-	question_id = Column(Integer, ForeignKey('questions.id'), nullable=False)
-	question = relationship('Question', back_populates='route_step')
-
-	def __repr__(self):
-		return f'step={self.step}'
-
-
-
-
-
+	tg_id = Column(Integer, unique=True, nullable=False)
+	first_name = Column(String(64),)
+	last_name = Column(String(64),)
 
 
 

@@ -41,7 +41,7 @@ q.q5.yo = 123
 print('q5 cats', q.q5.categories)
 for i in q.q5.categories:
 	print(i)
-q.q5.set_filter(func=lambda cat: cat.id % 2 == 0)
+q.q5.set_filter(func=lambda cat: int(cat.code) % 2 == 0)
 for i in q.q5.categories:
 	print(i)
 print('q5 cats', q.q5.categories)
@@ -49,7 +49,7 @@ print('q5 cats', q.q5.categories)
 # q.q6.set_filter(lambda cat: cat.code in [i.code for i in q.q5.categories])
 # q.q6.set_filter(lambda cat: cat in q.q5.categories)
 
-print(q.q6.set_filter(q.q5.categories))
+print(q.q6.set_filter(categories=q.q5.categories))
 print('q6 cats', q.q6.categories)
-print(q.q6.set_filter([1,2,3,4]))
+print(q.q6.set_filter(categories=[1, 2, 3, 4]))
 print('q6 cats', q.q6.categories)
