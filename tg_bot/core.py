@@ -1,18 +1,171 @@
 import time
 
-from settings import SLEEP_AFTER_INFO
-from survey.models import Session, info, Route, Question, location, categorical
-from tg_bot.tg_bot_utils import bot, run_polling, logger, get_markup, DataCheckError
+from settings import SLEEP_AFTER_INFO, TMP_FILE
+from survey.models import Session, Question, User, QuestionTypes as types
+from tg_bot.tg_bot_utils import bot, run_polling, logger
 from utils import get_distance
+from telebot.types import ReplyKeyboardMarkup, KeyboardButton, ReplyKeyboardRemove, InlineKeyboardMarkup, \
+	InlineKeyboardButton
+
+
+CALL_SEPARATOR = '$'
+
+
+def get_markup(question):
+	# if q.type == info or q.type == photo:
+	# 	return ReplyKeyboardRemove()
+	if question.type == types.location:
+		markup = ReplyKeyboardMarkup(one_time_keyboard=True)
+		buttons = KeyboardButton(text=question.categories[0].text, request_location=True)
+		markup.add(buttons)
+		return markup
+	if question.type == types.categorical:
+		markup = ReplyKeyboardMarkup(one_time_keyboard=True)
+		buttons = (KeyboardButton(text=i.text) for i in question.categories)
+		markup.add(*buttons)
+		return markup
+	return ReplyKeyboardRemove()
+
+
+class DataCheckError(Exception):
+	def __init__(self, *args):
+		self.msg = 'Wrong data provided'
+		if not args:
+			args += (self.msg, )
+		else:
+			self.msg = args[0]
+		super().__init__(self, *args)
+
+
+def warn_admins(text, session=None):
+	if not session:
+		session = Session()
+	admins = session.query(User).filter(User.is_admin).all()
+	for user in admins:
+		bot.send_message(user.chat_id, text)
+
+
+def create_user(message, session=None):
+	if not session:
+		session = Session()
+	user = User(
+		tg_id=message.from_user.id,
+		first_name=message.from_user.first_name,
+		last_name=message.from_user.last_name,
+		chat_id=message.chat.id,
+		username=message.from_user.username,
+	)
+	user.is_admin = user.tg_id in User.ADMIN_IDS
+	session.add(user)
+	session.commit()
+	print('NEW USER ', user)
+	print('NEW USER id', user.id)
+	warn_admins('New user joined: {}'.format(repr(user)), session)
+	return user
+
+
+def get_user(message, session=None):
+	if not session:
+		session = Session()
+	user = session.query(User).filter(User.tg_id == message.from_user.id).first()
+	if not user:
+		user = create_user(message, session)
+	return user
+
+
+@bot.message_handler(commands=['manage'])
+def handle_users(message):
+	user = get_user(message)
+	if user.is_admin:
+		markup = InlineKeyboardMarkup()
+		session = Session()
+		users = session.query(User).all()
+		# u_list = '\n'.join([f'/{i.id}' for i in users])
+		for i in users:
+			btn = InlineKeyboardButton(repr(i), callback_data=f'userselect{CALL_SEPARATOR}{i.tg_id}')
+			markup.add(btn)
+		bot.send_message(message.chat.id, 'Выбери пользователя для редактирования:', reply_markup=markup)
+	else:
+		bot.send_message(message.chat.id, repr(user))
+
+
+@bot.callback_query_handler(func=lambda call: True)
+def callback_query(call):
+	user = get_user(call)
+	print(call)
+	with open(TMP_FILE, 'w') as out:
+		out.write(str(call))
+
+	action = call.data.split(CALL_SEPARATOR)[0]
+	if action == 'userselect':
+		tg_id = call.data.split(CALL_SEPARATOR)[1]
+		bot.answer_callback_query(call.id, f'Selected user #{tg_id}')
+		return
+
+
+	bot.send_message(call.message.chat.id, 'No actions available')
+
+
+
+@bot.message_handler(commands=['users'])
+def handle_users(message):
+	user = get_user(message)
+	if user.is_admin:
+		session = Session()
+		users = session.query(User).all()
+		bot.send_message(message.chat.id, '\n'.join([repr(i) for i in users]))
+	else:
+		bot.send_message(message.chat.id, repr(user))
+
+
+@bot.message_handler(commands=['help'])
+def handle_help(message):
+	cmds = {
+		'help': 'Показать это сообщение',
+		'cancel': 'Прервать и выйти в главное меню',
+	}
+	user = get_user(message)
+	if user.is_interviewer:
+		cmds.update(**{
+			'surveys': 'Показать список доступных опросов',
+		})
+	if user.is_admin:
+		cmds.update(**{
+			'users': 'Показать список пользователей',
+			'manage': 'Раздать права всякие',
+		})
+	bot.send_message(message.chat.id, '\n'.join([f'/{k} - {v}' for k, v in cmds.items()]))
+
 
 
 @bot.message_handler(commands=['start'])
+def handle_start(message):
+	bot.send_message(message.chat.id, 'Привет! Я - Polly, бот для проведения опросов!')
+	user = get_user(message)
+	handle_help(message)
+	return
+
+
+@bot.message_handler(commands=['cancel'])
+def handle_start(message):
+	bot.send_message(message.chat.id, 'Ok, вернемся в начало.')
+	handle_help(message)
+	return
+
+
+@bot.message_handler(commands=['surveys'])
 def handle_start(message, *args, **kwargs):
+	user = get_user(message)
+	surveys = '\n'.join(str(i) for i in user.available_questionnaires)
+	bot.send_message(message.chat.id, f'Доступно {len(user.available_questionnaires)}:\n{surveys}')
+
+
+def start_survey(message, *args, **kwargs):
 	session = Session()
-	question = session.query(Question).join(Route).filter(Route.step == 1).first()  # todo change to step = 1
+	question = session.query(Question).filter(Question.step == 1).first()  # todo change to step = 1
 	bot.send_message(message.chat.id, f'Question: {question.code}, step: {question.route_step.step}, START')
 	msg = bot.send_message(message.chat.id, question.text, reply_markup=get_markup(question), )
-	if question.type == info:
+	if question.type == types.info:
 		time.sleep(SLEEP_AFTER_INFO)
 		handle_answer(msg, question=question)
 		return
@@ -20,10 +173,10 @@ def handle_start(message, *args, **kwargs):
 
 
 def check_data(question, message):
-	if question.type == location and message.content_type != location:
+	if question.type == types.location and message.content_type != types.location:
 		# print('check_data')
 		raise DataCheckError('Location error')
-	if question.type == categorical:
+	if question.type == types.categorical:
 		for i in question.categories:
 			if i.text == message.text:
 				return True
@@ -35,7 +188,7 @@ def handle_save(question, message): #todo hadle all saves to db
 	if not question.save_in_survey:
 		return
 	check_data(question, message)
-	if question.type == location:
+	if question.type == types.location:
 		latitude, longitude = message.location.latitude, message.location.longitude
 		dist = round(get_distance(latitude, longitude), 1)
 		bot.send_message(message.chat.id, f'Ого, ты в {dist}км от центра Москвы!')
@@ -77,7 +230,7 @@ def handle_answer(message, *args, **kwargs):
 
 	# before_question_ask(question, message)
 
-	if question.type == info:
+	if question.type == types.info:
 		msg = bot.send_message(message.chat.id, question.text, reply_markup=get_markup(question), )
 		time.sleep(SLEEP_AFTER_INFO)
 		handle_answer(msg, question=question)
@@ -94,7 +247,7 @@ def terminate(message):
 
 def get_next_question(question):
 	session = Session()
-	return session.query(Question).join(Route).filter(Route.step == question.route_step.step + 1).first()
+	return session.query(Question).filter(Question.step == question.route_step.step + 1).first()
 
 
 if __name__ == '__main__':

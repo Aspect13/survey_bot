@@ -4,11 +4,10 @@ import sys
 
 from aiohttp import web
 import telebot
-from telebot.types import ReplyKeyboardMarkup, KeyboardButton, ReplyKeyboardRemove
 
 from settings import API_TOKEN, WEBHOOK_URL_BASE, WEBHOOK_URL_PATH, WEBHOOK_SSL_CERT, WEBHOOK_SSL_PRIV, \
 	WEBHOOK_LISTEN, WEBHOOK_PORT, PROXY
-from survey.models import location, categorical
+
 
 logger = telebot.logger
 handler = logging.StreamHandler(sys.stdout)
@@ -65,29 +64,3 @@ def run_polling():
 	# WARNING It will work only if enable_save_next_step_handlers was called!
 	bot.load_next_step_handlers()
 	bot.polling(none_stop=True, timeout=123)
-
-
-def get_markup(q):
-	# if q.type == info or q.type == photo:
-	# 	return ReplyKeyboardRemove()
-	if q.type == location:
-		markup = ReplyKeyboardMarkup(one_time_keyboard=True)
-		buttons = KeyboardButton(text=q.categories[0].text, request_location=True)
-		markup.add(buttons)
-		return markup
-	if q.type == categorical:
-		markup = ReplyKeyboardMarkup(one_time_keyboard=True)
-		buttons = (KeyboardButton(text=i.text) for i in q.categories)
-		markup.add(*buttons)
-		return markup
-	return ReplyKeyboardRemove()
-
-
-class DataCheckError(Exception):
-	def __init__(self, *args):
-		self.msg = 'Wrong data provided'
-		if not args:
-			args += (self.msg, )
-		else:
-			self.msg = args[0]
-		super().__init__(self, *args)

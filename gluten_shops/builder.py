@@ -4,64 +4,7 @@ from operator import and_
 
 from sqlalchemy.exc import IntegrityError
 
-QUESTIONNAIRE_VERSION = 1
-QUESTIONNAIRE_NAME = 'gluten_shops'
-QUESTIONNAIRE_DESCRIPTION = 'Исследование магазинов с безглютеновой продукцией'
-ROUTE_VERSION = QUESTIONNAIRE_VERSION
-ROUTE_STEP = 1
-CATEGORY_CODE_START = 1
-ALLOW_OVERWRITE = True
 
-session = Session()
-
-
-def get_questionnaire():
-	quest = session.query(Questionnaire).filter(and_(Questionnaire.name == QUESTIONNAIRE_NAME, Questionnaire.version == QUESTIONNAIRE_VERSION)).first()
-	if not quest:
-		quest = Questionnaire()
-		quest.name = QUESTIONNAIRE_NAME
-		quest.description = QUESTIONNAIRE_DESCRIPTION
-		quest.version = QUESTIONNAIRE_VERSION
-		session.add(quest)
-		session.commit()
-	return quest
-
-
-questionnaire = get_questionnaire()
-
-
-def save(q):
-	global ROUTE_STEP
-	# global CATEGORY_CODE
-	# global q
-	# print(globals())
-
-	q.questionnaire = questionnaire
-	q.route_step = Route(step=ROUTE_STEP, version=ROUTE_VERSION)
-	q.save_in_survey = q.type != 'info'
-	category_code = CATEGORY_CODE_START
-	for i in q.categories:
-		i.code = i.code if i.code else category_code
-		session.add(i)
-		category_code += 1
-	session.add(q)
-	if ALLOW_OVERWRITE:
-		try:
-			session.commit()
-			print(f'{q.code} created')
-		except IntegrityError:
-			session.rollback()
-			print(f'{q.code} already in database')
-			session.delete(session.query(Question).filter(
-				and_(Question.code == q.code, Question.questionnaire_id == questionnaire.id)).first())
-			session.commit()
-			print(f'{q.code} deleted')
-			session.add(q)
-			session.commit()
-			print(f'{q.code} created')
-	else:
-		session.commit()
-	ROUTE_STEP += 1
 
 
 
