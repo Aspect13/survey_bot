@@ -1,5 +1,6 @@
+import datetime
 import json
-from sqlalchemy import create_engine, Column, String, Integer, ForeignKey, DateTime, Date, Boolean, UniqueConstraint, \
+from sqlalchemy import create_engine, Column, String, Integer, ForeignKey, DateTime, Boolean, UniqueConstraint, \
 	Table
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, relationship, scoped_session
@@ -35,6 +36,9 @@ class Questionnaire(Base):
 	questions = relationship('Question', back_populates='questionnaire', cascade='all, delete, delete-orphan',
 	                         order_by='Question.id')
 	# surveys = relationship('Survey', back_populates='questionnaire')
+
+	def __repr__(self):
+		return f'<Questionnaire {self.name} v{self.version}  {"(running)" if self.is_available else "(not running)"}>'
 
 
 class QuestionTypes:
@@ -161,7 +165,12 @@ class Category(Base):
 
 InterToQuest = Table('users_to_questionnaires', Base.metadata,
 	Column('users_id', Integer, ForeignKey('users.id')),
-	Column('questionnaires_id', Integer, ForeignKey('questionnaires.id'))
+	Column('questionnaires_id', Integer, ForeignKey('questionnaires.id')),
+)
+
+AdminToQuest = Table('admins_to_questionnaires', Base.metadata,
+	Column('users_id', Integer, ForeignKey('users.id')),
+	Column('questionnaires_id', Integer, ForeignKey('questionnaires.id')),
 )
 
 
@@ -171,16 +180,22 @@ class User(Base):
 	ADMIN_IDS = [305258161]
 
 	id = Column(Integer, primary_key=True)
-	tg_id = Column(Integer, unique=True, nullable=False, primary_key=True)
-	chat_id = Column(Integer, unique=False, nullable=False) # todo: should be unique
+	tg_id = Column(Integer, unique=True, nullable=False,)
+	# chat_id = Column(Integer, unique=False, nullable=False) # todo: should be unique
 	first_name = Column(String(64), )
 	last_name = Column(String(64), )
 	username = Column(String(64), )
+	date_joined = Column(DateTime, nullable=False, default=datetime.datetime.now())
 
 	is_interviewer = Column(Boolean, default=True, nullable=False)
 	is_admin = Column(Boolean, default=False, nullable=False)
 
 	available_questionnaires = relationship('Questionnaire', secondary=InterToQuest, backref='allowed_users')
+	admin_of_projects = relationship('Questionnaire', secondary=AdminToQuest, backref='project_admins')
+
+	@property
+	def is_root(self):
+		return self.tg_id == 123
 
 	def __repr__(self):
 		status = []
@@ -261,13 +276,15 @@ class User(Base):
 # 			lst.append(f'{k}: {v}')
 # 		return '\n'.join(lst)
 
-
-if __name__ == '__main__':
+def recreate_all():
 	s = Session()
 	tables = [i[0] for i in s.execute('select distinct tbl_name from sqlite_master')]
 	s.close()
 	s = Session()
 	for table in tables:
 		s.execute('drop table {}'.format(table))
-
 	Base.metadata.create_all(engine)
+
+
+if __name__ == '__main__':
+	recreate_all()

@@ -19,8 +19,12 @@ def get_questionnaire(session=None):
 session = Session()
 questionnaire = get_questionnaire(session=session)
 
-def save():
-	return _save()
+
+def save(q):
+	global ROUTE_STEP
+	saved = _save(q, questionnaire, step=ROUTE_STEP, session=session)
+	ROUTE_STEP += 1
+	return saved
 
 
 
