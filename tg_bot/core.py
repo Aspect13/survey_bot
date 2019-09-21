@@ -80,8 +80,24 @@ def build_callback(action, *args):
 	return json.dumps(d)
 
 
-@bot.message_handler(commands=['manage'])
-def handle_manage(message):
+@bot.message_handler(commands=['manage_users'])
+def handle_manage_users(message):
+	user = get_user(message)
+	if user.is_admin or user.is_root:
+		markup = InlineKeyboardMarkup()
+		session = Session()
+		users = session.query(User).all()
+		# u_list = '\n'.join([f'/{i.id}' for i in users])
+		for i in users:
+			btn = InlineKeyboardButton(repr(i), callback_data=build_callback('select_user', i.tg_id))
+			markup.add(btn)
+		bot.send_message(message.chat.id, 'Выбери пользователя для редактирования:', reply_markup=markup)
+	else:
+		bot.send_message(message.chat.id, repr(user))
+
+
+@bot.message_handler(commands=['manage_projects'])
+def handle_manage_projects(message):
 	user = get_user(message)
 	if user.is_admin or user.is_root:
 		markup = InlineKeyboardMarkup()
@@ -267,7 +283,7 @@ def handle_help(message):
 	if user.is_admin or user.is_root:
 		cmds.update(**{
 			'users': 'Показать список пользователей',
-			'manage': 'Раздать права всякие',
+			'manage_users': 'Раздать права всякие',
 		})
 	bot.send_message(message.chat.id, '\n'.join([f'/{k} - {v}' for k, v in cmds.items()]))
 

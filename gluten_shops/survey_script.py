@@ -1,8 +1,7 @@
 ﻿from emoji import emojize
 
-from gluten_shops.q_settings import _get_questionnaire, _save
-from survey.models import Question, QuestionTypes as types, Session, Questionnaire, Category
-
+from gluten_shops.survey_builder import _get_questionnaire, _save
+from survey.models import Question, QuestionTypes as types, Session, Category, User
 
 QUESTIONNAIRE_VERSION = 1
 QUESTIONNAIRE_NAME = 'gluten_shops'
@@ -12,12 +11,13 @@ CATEGORY_CODE_START = 1
 ALLOW_OVERWRITE = True
 
 
-def get_questionnaire(session=None):
-	return _get_questionnaire(QUESTIONNAIRE_NAME, QUESTIONNAIRE_VERSION, QUESTIONNAIRE_DESCRIPTION, session=session)
+def get_questionnaire(session=None, **kwargs):
+	return _get_questionnaire(QUESTIONNAIRE_NAME, QUESTIONNAIRE_VERSION, QUESTIONNAIRE_DESCRIPTION, session=session, **kwargs)
 
 
 session = Session()
-questionnaire = get_questionnaire(session=session)
+me = session.query(User).filter(User.id == 305258161).first()
+questionnaire = get_questionnaire(session=session, created_by=me)
 
 
 def save(q):
@@ -69,6 +69,16 @@ q.text = emojize('Нажми на кнопку, чтобы отправить г
 cats = [Category(text='Отправить местоположение'), ]
 q.categories = cats
 save(q)
+
+
+q = Question()
+q.code = 'shops'
+q.type = types.categorical
+q.text = 'Вот найденные магазины:'
+cats = [Category(text=f'{i["name"]} ({i["address"]})') for i in shops]
+q.categories = cats
+save(q)
+
 
 q = Question()
 q.code = 'q3'

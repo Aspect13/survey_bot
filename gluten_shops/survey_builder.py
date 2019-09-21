@@ -5,7 +5,7 @@ from sqlalchemy.exc import IntegrityError
 from survey.models import Session, Questionnaire, QuestionTypes, Question
 
 
-def _get_questionnaire(q_name, q_version, q_description, session=None):
+def _get_questionnaire(q_name, q_version, q_description, session=None, **kwargs):
 	if not session:
 		session = Session()
 	quest = session.query(Questionnaire).filter(
@@ -16,6 +16,10 @@ def _get_questionnaire(q_name, q_version, q_description, session=None):
 		quest.name = q_name
 		quest.description = q_description
 		quest.version = q_version
+		if kwargs.get('created_by'):
+			quest.created_by = kwargs.get('created_by')
+
+		quest.results_table_name = get_result_table_name(quest)
 		session.add(quest)
 		session.commit()
 	return quest
@@ -26,7 +30,7 @@ def _save(question, questionnaire, step=None, category_code_start=1, allow_overw
 		session = Session()
 	question.questionnaire = questionnaire
 	question.step = step
-	question.save_in_survey = question.type != QuestionTypes.info
+	question.save_in_survey = question.type not in (QuestionTypes.info, QuestionTypes.sticker)
 	category_code = category_code_start
 	for i in question.categories:
 		i.code = i.code if i.code else category_code
@@ -52,3 +56,7 @@ def _save(question, questionnaire, step=None, category_code_start=1, allow_overw
 		session.commit()
 	if step:
 		step += 1
+
+
+def get_result_table_name(questionnaire):
+	return '{}_{}'.format(questionnaire.name, questionnaire.version)

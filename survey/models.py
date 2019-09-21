@@ -25,20 +25,26 @@ Base = declarative_base()
 
 class Questionnaire(Base):
 	__tablename__ = 'questionnaires'
-	__table_args__ = (UniqueConstraint('version', 'name', name='uc_1'),)
+	__table_args__ = (UniqueConstraint('name', 'version', name='uc_1'),)
 
 	id = Column(Integer, primary_key=True)
 	name = Column(String(64), nullable=False)
 	description = Column(String(256), nullable=True)
 	version = Column(Integer, nullable=False)
-	is_available = Column(Boolean, nullable=False, default=False)
+	is_running = Column(Boolean, nullable=False, default=False)
+
+	# results_table = relationship('sqlite_master', back_populates='questionnaire')
+	results_table_name = Column(String(64), nullable=True)
 
 	questions = relationship('Question', back_populates='questionnaire', cascade='all, delete, delete-orphan',
 	                         order_by='Question.id')
+
+	created_by = relationship('User', back_populates='created_questionnaires')
+	created_by_id = Column(Integer, ForeignKey('users.id'), nullable=True)
 	# surveys = relationship('Survey', back_populates='questionnaire')
 
 	def __repr__(self):
-		return f'<Questionnaire {self.name} v{self.version}  {"(running)" if self.is_available else "(not running)"}>'
+		return f'<Questionnaire {self.name} v{self.version}  {"(running)" if self.is_running else "(not running)"}>'
 
 
 class QuestionTypes:
@@ -47,17 +53,14 @@ class QuestionTypes:
 	photo = 'photo'
 	location = 'location'
 	text = 'text'
-	dict = {
-		'info': info,
-		'categorical': categorical,
-		'photo': photo,
-		'location': location,
-		'text': text,
-	}
+	sticker = 'sticker'
+	datetime = 'datetime'
+
+	def __iter__(self):
+		return ((i, i) for i in filter(lambda attr: not attr.startswith('__'), QuestionTypes.__dict__))
 
 	def __getitem__(self, item, default=None):
-		return self.dict.get(item, default)
-
+		return self.__getattribute__(item)
 
 
 
@@ -86,7 +89,7 @@ class Question(Base):
 	id = Column(Integer, primary_key=True)
 	code = Column(String(64), nullable=False)
 	text = Column(String(512), nullable=False, )
-	type = Column(ChoiceType(QuestionTypes.dict))
+	type = Column(ChoiceType(QuestionTypes()))
 	save_in_survey = Column(Boolean, nullable=False, default=True)
 	step = Column(Integer, )
 
@@ -124,7 +127,7 @@ class Question(Base):
 	# 	return lambda: cat.code in [j.code for j in categories]
 
 	def __repr__(self):
-		return f'<Question code={self.code} text={self.text[:10]}... {self.route_step}>'
+		return f'<Question code={self.code} text={self.text[:10]}... {self.step}>'
 
 
 class Category(Base):
@@ -193,9 +196,11 @@ class User(Base):
 	available_questionnaires = relationship('Questionnaire', secondary=InterToQuest, backref='allowed_users')
 	admin_of_projects = relationship('Questionnaire', secondary=AdminToQuest, backref='project_admins')
 
+	created_questionnaires = relationship('Questionnaire', back_populates='created_by')
+
 	@property
 	def is_root(self):
-		return self.tg_id == 123
+		return self.tg_id == 305258161
 
 	def __repr__(self):
 		status = []
@@ -276,15 +281,17 @@ class User(Base):
 # 			lst.append(f'{k}: {v}')
 # 		return '\n'.join(lst)
 
-def recreate_all():
-	s = Session()
-	tables = [i[0] for i in s.execute('select distinct tbl_name from sqlite_master')]
-	s.close()
-	s = Session()
+def recreate_all(session=None):
+	if not session:
+		session = Session()
+	tables = [i[0] for i in session.execute('select distinct tbl_name from sqlite_master')]
+	session.close()
+	session = Session()
 	for table in tables:
-		s.execute('drop table {}'.format(table))
+		session.execute('drop table {}'.format(table))
 	Base.metadata.create_all(engine)
 
 
 if __name__ == '__main__':
-	recreate_all()
+	# recreate_all()
+	print('Use tmp_restart_all.py')
