@@ -2,6 +2,7 @@ import datetime
 import json
 from sqlalchemy import create_engine, Column, String, Integer, ForeignKey, DateTime, Boolean, UniqueConstraint, \
 	Table
+from sqlalchemy.ext.automap import automap_base
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, relationship, scoped_session
 from sqlalchemy_utils import ChoiceType
@@ -13,6 +14,7 @@ engine = create_engine(f'sqlite:///{DB_PATH}', echo=__name__ == '__main__')
 session_factory = sessionmaker(bind=engine)
 Session = scoped_session(session_factory)
 Base = declarative_base()
+AutomapBase = automap_base(Base)
 
 
 # class Survey(Base):
@@ -36,10 +38,13 @@ class Questionnaire(Base):
 	# results_table = relationship('sqlite_master', back_populates='questionnaire')
 	results_table_name = Column(String(64), nullable=True)
 
-	questions = relationship('Question', back_populates='questionnaire', cascade='all, delete, delete-orphan',
+	# questions = relationship('Question', back_populates='questionnaire', cascade='all, delete, delete-orphan',
+	#                          order_by='Question.id')
+	questions = relationship('Question', backref='questionnaire', cascade='all, delete, delete-orphan',
 	                         order_by='Question.id')
 
-	created_by = relationship('User', back_populates='created_questionnaires')
+	# created_by = relationship('User', back_populates='created_questionnaires')
+	# created_by = relationship('User', backref='created_questionnaires')
 	created_by_id = Column(Integer, ForeignKey('users.id'), nullable=True)
 	# surveys = relationship('Survey', back_populates='questionnaire')
 
@@ -55,6 +60,7 @@ class QuestionTypes:
 	text = 'text'
 	sticker = 'sticker'
 	datetime = 'datetime'
+	timestamp = 'timestamp'
 	integer = 'integer'
 
 	def __iter__(self):
@@ -94,12 +100,13 @@ class Question(Base):
 	save_in_survey = Column(Boolean, nullable=False, default=True)
 	step = Column(Integer, )
 
-	categories = relationship('Category', back_populates='question', cascade='all, delete, delete-orphan', )
+	# categories = relationship('Category', back_populates='question', cascade='all, delete, delete-orphan', )
+	categories = relationship('Category', backref='question', cascade='all, delete, delete-orphan', )
 
 	# route_step = relationship('Route', back_populates='question', uselist=False, cascade='all, delete, delete-orphan')
 
 	questionnaire_id = Column(Integer, ForeignKey('questionnaires.id'), nullable=False)
-	questionnaire = relationship('Questionnaire', back_populates='questions')
+	# questionnaire = relationship('Questionnaire', back_populates='questions')
 
 
 	# def save(self, session=None):
@@ -140,7 +147,7 @@ class Category(Base):
 	code = Column(String(64), nullable=False)
 
 	question_id = Column(Integer, ForeignKey('questions.id'), nullable=False)
-	question = relationship('Question', back_populates='categories')
+	# question = relationship('Question', back_populates='categories')
 
 	def __repr__(self):
 		return f'<Category {self.code}: {self.text}>'
@@ -197,7 +204,8 @@ class User(Base):
 	available_questionnaires = relationship('Questionnaire', secondary=InterToQuest, backref='project_users')
 	admin_of_projects = relationship('Questionnaire', secondary=AdminToQuest, backref='project_admins')
 
-	created_questionnaires = relationship('Questionnaire', back_populates='created_by')
+	# created_questionnaires = relationship('Questionnaire', back_populates='created_by')
+	created_questionnaires = relationship('Questionnaire', backref='created_by')
 
 	@property
 	def is_root(self):
@@ -219,69 +227,6 @@ class User(Base):
 		return '<User({status}) {first_name} {last_name} id: {tg_id}>'.format(**d)
 
 
-# get_users = lambda: json.load(open(USER_FILE, 'r', encoding='utf-8'))
-
-
-# user_dict = get_users()
-
-
-# class User:
-# 	def __init__(self, user):
-# 		self.existed = False
-# 		self.id = str(user.id)
-# 		self.first_name = user.first_name
-# 		self.last_name = user.last_name
-# 		try:
-# 			user_dict = get_users()
-# 			user_saved = user_dict[self.id]
-# 			self.preferred_name = user_saved.get('preferred_name')
-# 			self.age = user_saved.get('age')
-# 			self.sex = user_saved.get('sex')
-# 			self.latitude = user_saved.get('latitude')
-# 			self.longitude = user_saved.get('longitude')
-# 			self.photos = user_saved.get('photos')
-# 			self.existed = True
-# 			self.q1 = user_saved.get('q1')
-# 			self.q2 = user_saved.get('q2')
-# 			self.q3 = user_saved.get('q3')
-# 			print('Got user from json')
-# 		except KeyError:
-# 			self.preferred_name = f'{self.first_name} {self.last_name}'
-# 			self.age = None
-# 			self.sex = None
-# 			self.latitude = None
-# 			self.longitude = None
-# 			self.q1 = None
-# 			self.q2 = None
-# 			self.q3 = None
-# 			self.photos = []
-# 			print('Created new user')
-#
-# 	# @property
-# 	# def serialized(self):
-# 	# 	return json.dumps(self.__dict__)
-#
-# 	def save(self):
-# 		# get_users()
-# 		user_dict = get_users()
-# 		user_dict[self.id] = self.__dict__
-# 		json.dump(user_dict, open(USER_FILE, 'w', encoding='utf-8'))
-#
-# 	def purge(self):
-# 		user_dict = get_users()
-# 		del user_dict[self.id]
-# 		json.dump(user_dict, open(USER_FILE, 'w', encoding='utf-8'))
-#
-# 	def __repr__(self):
-# 		d = self.__dict__.copy()
-# 		del d['existed']
-# 		lst = []
-# 		for k, v in d.items():
-# 			if k == 'photos':
-# 				v = '[\n\t' + ",\n\t".join(v) + '\n]'
-# 			lst.append(f'{k}: {v}')
-# 		return '\n'.join(lst)
-
 def recreate_all(session=None):
 	if not session:
 		session = Session()
@@ -289,7 +234,8 @@ def recreate_all(session=None):
 	session.close()
 	session = Session()
 	for table in tables:
-		session.execute('drop table {}'.format(table))
+		session.execute('drop table if exists {}'.format(table))
+	# Base.prepare()
 	Base.metadata.create_all(engine)
 
 
