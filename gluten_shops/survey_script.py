@@ -1,14 +1,13 @@
 ﻿from emoji import emojize
 
-from gluten_shops.survey_builder import _get_questionnaire, _save
+from survey.survey_builder import _get_questionnaire, _save
 from survey.models import Question, QuestionTypes as types, Session, Category, User
 
 QUESTIONNAIRE_VERSION = 1
 QUESTIONNAIRE_NAME = 'gluten_shops'
 QUESTIONNAIRE_DESCRIPTION = 'Исследование магазинов с безглютеновой продукцией'
 ROUTE_STEP = 1
-CATEGORY_CODE_START = 1
-ALLOW_OVERWRITE = True
+ALLOW_OVERWRITE = False
 
 
 def get_questionnaire(session=None, **kwargs):
@@ -16,16 +15,15 @@ def get_questionnaire(session=None, **kwargs):
 
 
 session = Session()
-me = session.query(User).filter(User.id == 305258161).first()
+me = session.query(User).filter(User.tg_id == 305258161).first()
 questionnaire = get_questionnaire(session=session, created_by=me)
 
 
 def save(q):
 	global ROUTE_STEP
-	saved = _save(q, questionnaire, step=ROUTE_STEP, session=session)
+	saved = _save(q, questionnaire, step=ROUTE_STEP, session=session, allow_overwrite=ALLOW_OVERWRITE)
 	ROUTE_STEP += 1
 	return saved
-
 
 
 

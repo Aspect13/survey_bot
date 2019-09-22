@@ -31,7 +31,7 @@ class Questionnaire(Base):
 	name = Column(String(64), nullable=False)
 	description = Column(String(256), nullable=True)
 	version = Column(Integer, nullable=False)
-	is_running = Column(Boolean, nullable=False, default=False)
+	is_active = Column(Boolean, nullable=False, default=False)
 
 	# results_table = relationship('sqlite_master', back_populates='questionnaire')
 	results_table_name = Column(String(64), nullable=True)
@@ -44,7 +44,7 @@ class Questionnaire(Base):
 	# surveys = relationship('Survey', back_populates='questionnaire')
 
 	def __repr__(self):
-		return f'<Questionnaire {self.name} v{self.version}  {"(running)" if self.is_running else "(not running)"}>'
+		return f'<Questionnaire {self.name} v{self.version}  {"(active)" if self.is_active else "(not active)"}>'
 
 
 class QuestionTypes:
@@ -55,6 +55,7 @@ class QuestionTypes:
 	text = 'text'
 	sticker = 'sticker'
 	datetime = 'datetime'
+	integer = 'integer'
 
 	def __iter__(self):
 		return ((i, i) for i in filter(lambda attr: not attr.startswith('__'), QuestionTypes.__dict__))
@@ -193,7 +194,7 @@ class User(Base):
 	is_interviewer = Column(Boolean, default=True, nullable=False)
 	is_admin = Column(Boolean, default=False, nullable=False)
 
-	available_questionnaires = relationship('Questionnaire', secondary=InterToQuest, backref='allowed_users')
+	available_questionnaires = relationship('Questionnaire', secondary=InterToQuest, backref='project_users')
 	admin_of_projects = relationship('Questionnaire', secondary=AdminToQuest, backref='project_admins')
 
 	created_questionnaires = relationship('Questionnaire', back_populates='created_by')

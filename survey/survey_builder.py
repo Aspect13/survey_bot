@@ -16,8 +16,11 @@ def _get_questionnaire(q_name, q_version, q_description, session=None, **kwargs)
 		quest.name = q_name
 		quest.description = q_description
 		quest.version = q_version
-		if kwargs.get('created_by'):
-			quest.created_by = kwargs.get('created_by')
+		creator = kwargs.get('created_by')
+		if creator:
+			quest.created_by = creator
+			quest.project_users.append(creator)
+			quest.project_admins.append(creator)
 
 		quest.results_table_name = get_result_table_name(quest)
 		session.add(quest)
@@ -37,13 +40,13 @@ def _save(question, questionnaire, step=None, category_code_start=1, allow_overw
 		session.add(i)
 		category_code += 1
 	session.add(question)
-	if allow_overwrite:
-		try:
-			session.commit()
-			print(f'{question.code} created')
-		except IntegrityError:
-			session.rollback()
-			print(f'{question.code} already in database')
+	try:
+		session.commit()
+		print(f'{question.code} created')
+	except IntegrityError:
+		session.rollback()
+		print(f'{question.code} already in database')
+		if allow_overwrite:
 			session.delete(session.query(Question).filter(
 				and_(Question.code == question.code, Question.questionnaire_id == questionnaire.id)).first()
 			)
@@ -52,8 +55,6 @@ def _save(question, questionnaire, step=None, category_code_start=1, allow_overw
 			session.add(question)
 			session.commit()
 			print(f'{question.code} created')
-	else:
-		session.commit()
 	if step:
 		step += 1
 
