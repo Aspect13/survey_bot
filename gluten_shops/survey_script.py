@@ -54,12 +54,7 @@ three_scale_cats = lambda: [
 q = Question()
 q.code = 'q1'
 q.type = types.info
-q.text = emojize(
-	'Привет, исследователь! Надеюсь, твой гаджет хорошо заряжен, и в нем достаточно свободной памяти.' +
-	'Тебе предстоит сделать много фоток и нагулять хороший аппетит :smile:\n' +
-	'Будь внимателен! Посмотри дважды, прежде чем ответить или сделать фото :eyes:\n' +
-	'Если сомневаешься, все равно фоткай. Да пребудет с тобой Сила Киноа! :raised_hands:'
-)
+q.text = emojize('Привет, исследователь! Надеюсь, твой гаджет хорошо заряжен, и в нем достаточно свободной памяти.\nТебе предстоит сделать много фоток и нагулять хороший аппетит :smile: \nБудь внимателен! Посмотри дважды, прежде чем ответить или сделать фото :eyes: \nЕсли сомневаешься, все равно фоткай. Да пребудет с тобой Сила Киноа! :raised_hands:')
 save(q)
 
 q = Question()
@@ -74,7 +69,7 @@ save(q)
 q = Question()
 q.code = 'shops'
 q.type = types.categorical
-q.text = 'Вот найденные магазины:'
+q.text = 'Вот найденные магазины :right_arrow_curving_down:'
 cats = [Category(text='{name} ({address})'.format(**i)) for i in shops]
 q.categories = cats
 save(q)
@@ -95,7 +90,7 @@ save(q)
 q = Question()
 q.code = 'q5'
 q.type = types.categorical
-q.text = emojize('Принято! Теперь иди в отдел бакалеи. Найди стеллаж с макаронами/пастой :ramen:\nПосмотри есть ли там продукты без глютена?')
+q.text = emojize('Принято! Теперь иди в отдел бакалеи. Найди стеллаж с макаронами/пастой :ramen: \nПосмотри есть ли там продукты без глютена?')
 cats = yes_no_cats()
 q.categories = cats
 save(q)
@@ -123,7 +118,7 @@ save(q)
 q = Question()
 q.code = 'q9'
 q.type = types.text
-q.text = emojize('А что там рядом с макаронами? Напиши, какие полки расположены слева?:point_left:')
+q.text = emojize('А что там рядом с макаронами? Напиши, какие полки расположены слева? :point_left:')
 save(q)
 
 q = Question()
@@ -155,7 +150,7 @@ save(q)
 q = Question()
 q.code = 'q14'
 q.type = types.text
-q.text = emojize('А что там рядом с крупами? Напиши, какие полки расположены слева?:point_left:')
+q.text = emojize('А что там рядом с крупами? Напиши, какие полки расположены слева? :point_left:')
 save(q)
 
 q = Question()
@@ -207,7 +202,7 @@ save(q)
 q = Question()
 q.code = 'q22'
 q.type = types.text
-q.text = emojize('А что там рядом с этим отделом? Напиши, какие полки расположены слева?:point_left:')
+q.text = emojize('А что там рядом с этим отделом? Напиши, какие полки расположены слева? :point_left:')
 save(q)
 
 q = Question()
@@ -253,7 +248,7 @@ save(q)
 q = Question()
 q.code = 'q29'
 q.type = types.categorical
-q.text = emojize('Как аппетитно!:heart_eyes: А есть на полках несладкие печенья? Например, соленые крекеры')
+q.text = emojize('Как аппетитно! :heart_eyes: А есть на полках несладкие печенья? Например, соленые крекеры')
 cats = yes_no_cats()
 q.categories = cats
 save(q)
@@ -267,7 +262,7 @@ save(q)
 q = Question()
 q.code = 'q31'
 q.type = types.text
-q.text = emojize('А что там рядом с этим отделом? Напиши, какие полки расположены слева?:point_left:')
+q.text = emojize('А что там рядом с этим отделом? Напиши, какие полки расположены слева? :point_left:')
 save(q)
 
 q = Question()
@@ -313,7 +308,7 @@ save(q)
 q = Question()
 q.code = 'q38'
 q.type = types.text
-q.text = emojize('А что там рядом с этим отделом? Напиши, какие полки расположены слева?:point_left:')
+q.text = emojize('А что там рядом с этим отделом? Напиши, какие полки расположены слева? :point_left:')
 save(q)
 
 q = Question()
@@ -339,7 +334,7 @@ save(q)
 q = Question()
 q.code = 'q42'
 q.type = types.categorical
-q.text = emojize('Надеюсь, ты не сильно проголодался, а охранник еще не начал подозрительно смотреть на тебя :yum:  Финал близко!\nПосмотри, есть ли в магазине стеллажи с диетической продукцией? Часто на них расположены товары для диабетиков. :herb:')
+q.text = emojize('Надеюсь, ты не сильно проголодался, а охранник еще не начал подозрительно смотреть на тебя :yum: \nФинал близко!\nПосмотри, есть ли в магазине стеллажи с диетической продукцией? Часто на них расположены товары для диабетиков. :herb:')
 cats = yes_no_cats()
 q.categories = cats
 save(q)

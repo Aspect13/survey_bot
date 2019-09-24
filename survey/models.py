@@ -71,6 +71,7 @@ class Questionnaire(Base):
 
 	@property
 	def result_table(self):
+		return get_reflected_db(self.results_table_name)
 		if self._result_table:
 			return self._result_table
 		self._result_table = get_reflected_db(self.results_table_name)
@@ -142,11 +143,25 @@ class Question(Base):
 		print(self.type)
 		return self.type not in {QuestionTypes.sticker, QuestionTypes.info, QuestionTypes.constraint}
 
+	def get_response_object(self, user_tg_id, session=None):
+		if not session:
+			session = Session()
+		print(self.code)
+		result_table = self.questionnaire.result_table
+		result = session.query(result_table).filter(result_table.started_by_id == user_tg_id).first()
+		if not result:
+			result = result_table(started_by_id=user_tg_id)
+			session.add(result)
+			session.commit()
+		return result
+
+
+
 
 	# def save(self, session=None):
 
 
-	# original_categories = None
+	original_categories = None
 
 	def set_filter(self, categories=None, func=None, persist=True):
 		if not self.original_categories:
@@ -155,7 +170,8 @@ class Question(Base):
 			# print(categories)
 			self.set_filter(
 				func=lambda cat: cat.code in [i.code if isinstance(i, Category) else str(i) for i in categories],
-				persist=persist)
+				persist=persist
+			)
 		if persist:
 			self.categories = list(filter(func, self.original_categories))
 		return list(filter(func, self.original_categories))

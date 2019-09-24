@@ -2,8 +2,11 @@ import json
 import time
 from operator import and_
 
+from sqlalchemy.exc import ProgrammingError
+from sqlalchemy.orm.exc import DetachedInstanceError
+
 from settings import SLEEP_AFTER_INFO, TMP_FILE
-from survey.models import Session, Question, User, QuestionTypes as types, Questionnaire, QuestionTypes
+from survey.models import Session, Question, User, Questionnaire, QuestionTypes
 from tg_bot.server import bot, run_polling, logger
 from tg_bot.helper import get_markup, DataCheckError, build_callback
 from tg_bot.user_management import get_user, handle_user_edit, handle_toggle_is_admin, handle_toggle_is_interviewer, \
@@ -152,48 +155,102 @@ def handle_start_survey_answer(message, questionnaire_id):
 # 		return
 # 	bot.register_next_step_handler(msg, handle_answer, question=question)
 
+def before_question_ask(question, message):
+	print('before_question_ask', question.code)
+	if question.code == 'shops':
+		shops = [
+			{
+				'name': 'ГУМ', 'address': 'Красная площадь, 3, Москва, 109012',
+				'latitude': 55.7546942, 'longitude': 37.6214334
+			},
+		]
+		s = Session()
+		result_table = question.questionnaire.result_table
+		latitude, longitude = s.query(result_table.q2_latitude, result_table.q2_longitude).filter(result_table.started_by_id == message.from_user.id).first()
+		msg = ''
+		distance_tolerance = 4
+		for shop in shops:
+			shop['distance'] = round(get_distance(latitude, longitude, lat2=shop['latitude'], lon2=shop['longitude']), 1)
+			msg += '\t{name}, distance: {distance}km\n'.format(**shop)
+		question.set_filter(func=lambda cat: shops[int(cat.code) - 1]['distance'] < distance_tolerance)
+		bot.send_message(message.chat.id, f'All shops are:\n{msg}But only the ones within {distance_tolerance}km will be available for selection.')
+
 
 def check_data(question, message):
-	if question.type == types.location and message.content_type != types.location:
+	if question.type == QuestionTypes.location and message.content_type != QuestionTypes.location:
 		# print('check_data')
 		raise DataCheckError('Location error')
-	if question.type == types.categorical:
+	if question.type == QuestionTypes.categorical:
 		ok = message.text in [i.text for i in question.categories]
-		# for i in question.categories:
-		# 	if i.text == message.text:
-		# 		return True
 		if not ok:
 			raise DataCheckError('Category {} doesn\'t exist'.format(message.text))
 	return True
+
 
 
 def handle_save(question, message): #todo handle all saves to db
 	if not question.save_in_survey:
 		return
 	check_data(question, message)
-	if question.type == types.location:
-		latitude, longitude = message.location.latitude, message.location.longitude
-		dist = round(get_distance(latitude, longitude), 1)
-		bot.send_message(message.chat.id, f'Ого, ты в {dist}км от центра Москвы!')
-	# logger.info(' '.join(('question', repr(question), 'is saved to db with:', str(message.json))))
+	session = Session()
+	try:
+		response = question.get_response_object(message.from_user.id)
+	except (DetachedInstanceError, ProgrammingError):
+		question = session.query(Question).filter(Question.id == question.id).first()
+		response = question.get_response_object(message.from_user.id)
+	if question.type == QuestionTypes.location:
+		response.__setattr__(f'{question.code}_latitude', message.location.latitude)
+		response.__setattr__(f'{question.code}_longitude', message.location.longitude)
+		session.add(response)
+		session.commit()
 
+
+
+		# bot.send_message(message.chat.id, f'Ого, ты в {dist}км от центра Москвы!')
+
+	# logger.info(' '.join(('question', repr(question), 'is saved to db with:', str(message.json))))
+def handle_datacheck_error(question, message, error, flags):
+	if question.code == 'shops' and message.content_type == QuestionTypes.location:
+		# handle_save(get_previous_question(question), message)
+		# msg = bot.send_message(message.chat.id, question.text, reply_markup=get_markup(question), )
+		handle_answer(message, question=get_previous_question(question))
+		# bot.register_next_step_handler(message, handle_answer, question=question, flags={Flags.goto_start})
+		if Flags.no_step_register not in flags:
+			bot.register_next_step_handler(message, handle_answer, question=question, flags={Flags.no_step_register})
+		return
+	else:
+		bot.send_message(message.chat.id, error.msg)
+	msg = bot.send_message(message.chat.id, question.text, reply_markup=get_markup(question), )
+	if Flags.previous_question in flags:
+		if Flags.no_step_register not in flags:
+			bot.register_next_step_handler(msg, handle_answer, question=get_previous_question(question))
+	else:
+		if Flags.no_step_register not in flags:
+			bot.register_next_step_handler(msg, handle_answer, question=question)
 
 class Flags:
 	goto_start = 'goto_start'
 	terminate = 'terminate'
+	previous_question = 'previous_question'
+	add_back_button = 'back_button'
+	no_step_register = 'no_step_register'
 
 
 def handle_answer(message, *args, **kwargs):
+	flags = kwargs.get('flags', set())
+
 	if message.text == '/start':
 		handle_start(message)
+		flags.add(Flags.terminate)
 	if message.text == '/cancel':
 		handle_cancel(message)
+		flags.add(Flags.terminate)
 	if message.text == '/help':
 		handle_help(message)
 
-	flags = kwargs.get('flags', {})
 	if Flags.terminate in flags:
 		terminate(message)
+		return
 
 	question = kwargs.get('question')
 
@@ -203,24 +260,27 @@ def handle_answer(message, *args, **kwargs):
 		try:
 			handle_save(question, message)
 		except DataCheckError as e:
-			bot.send_message(message.chat.id, e.msg)
-			msg = bot.send_message(message.chat.id, question.text, reply_markup=get_markup(question), )
-			bot.register_next_step_handler(msg, handle_answer, question=question)
+			handle_datacheck_error(question, message, e, flags)
+
 			return
 
 		# after_question_ask(question, message)
 		bot.send_message(message.chat.id, f'Question: {question.code}, step: {question.step}, END')
-		question = get_next_question(question)
+		question = get_next_question(question) if Flags.previous_question not in flags else get_previous_question(question)
 
 	if not question:
 		terminate(message)
+		return
 
 	try:
 		bot.send_message(message.chat.id, f'Question: {question.code}, step: {question.step}, START')
 	except AttributeError:
 		terminate(message)
+		return
 
-	# before_question_ask(question, message)
+	# print("Q.RESPONSE", question.code, question.get_response_object(message.from_user.id))
+
+	before_question_ask(question, message)
 
 	if question.type in {QuestionTypes.info, QuestionTypes.sticker}:
 		msg = bot.send_message(message.chat.id, question.text, reply_markup=get_markup(question), )
@@ -229,11 +289,12 @@ def handle_answer(message, *args, **kwargs):
 		return
 
 	msg = bot.send_message(message.chat.id, question.text, reply_markup=get_markup(question))
-	bot.register_next_step_handler(msg, handle_answer, question=question)
+	if Flags.no_step_register not in flags:
+		bot.register_next_step_handler(msg, handle_answer, question=question)
 
 
 def terminate(message):
-	bot.send_message(message.chat.id, 'That is all over')
+	bot.send_message(message.chat.id, 'Survey is over')
 	return
 
 
@@ -241,6 +302,10 @@ def get_next_question(question):
 	session = Session()
 	return session.query(Question).filter(Question.step == question.step + 1).first()
 
+def get_previous_question(question):
+	print('Previous question requested for ', question.code)
+	session = Session()
+	return session.query(Question).filter(Question.step == question.step - 1).first()
 
 if __name__ == '__main__':
 	# # Enable saving next step handlers to file "./.handlers-saves/step.save".
