@@ -3,6 +3,7 @@
 /venv/
 /cert/*
 /photos/*
+/Media/*
 
 *.log
 *.sqlite

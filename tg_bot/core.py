@@ -1,18 +1,22 @@
+import datetime
 import json
 import time
 from operator import and_
+from pathlib import Path
 
 from sqlalchemy.exc import ProgrammingError
 from sqlalchemy.orm.exc import DetachedInstanceError
+from sqlalchemy_utils import Choice
 
-from settings import SLEEP_AFTER_INFO, TMP_FILE
-from survey.models import Session, Question, User, Questionnaire, QuestionTypes
-from tg_bot.server import bot, run_polling, logger
+from settings import SLEEP_AFTER_INFO, MEDIA_FOLDER, ROOT_DIR
+from survey.models import Session, Question, Questionnaire, QuestionTypes
+from tg_bot.server import bot, run_polling
 from tg_bot.helper import get_markup, DataCheckError, build_callback
-from tg_bot.user_management import get_user, handle_user_edit, handle_toggle_is_admin, handle_toggle_is_interviewer, \
-	handle_assign_to_projects, handle_assign_user_to_project, handle_assign_admin_to_project
+from tg_bot.management import get_user, handle_user_edit, handle_toggle_is_admin, handle_toggle_is_interviewer, \
+	handle_assign_to_projects, handle_assign_user_to_project, handle_assign_admin_to_project, handle_project_edit, \
+	handle_toggle_is_active, handle_assign_users
 from utils import get_distance
-from telebot.types import ReplyKeyboardMarkup, KeyboardButton, ReplyKeyboardRemove, InlineKeyboardMarkup, \
+from telebot.types import ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, \
 	InlineKeyboardButton
 
 
@@ -35,7 +39,9 @@ ACTION_RESOLVER = {
 	'assign_user_to_project': handle_assign_user_to_project,
 	'assign_admin_to_project': handle_assign_admin_to_project,
 	'start_survey': handle_start_survey,
-	'select_project': None,
+	'select_project': handle_project_edit,
+	'toggle_is_active': handle_toggle_is_active,
+	'assign_users': handle_assign_users,
 }
 
 
@@ -44,33 +50,17 @@ def callback_query(call):
 	if call.data == 'dummy':
 		print('No call data')
 		return
-	user = get_user(call)
-	print('call', call)
-	# with open(TMP_FILE, 'w') as out:
-	# 	out.write(str(call))
-
-	if user.is_admin or user.is_root:
-		callback = json.loads(call.data)
-		action = callback.get('action')
-		args = callback.get('args', [])
-		# if action == 'select_user':
-		# 	handle_edit(call, *args)
-		# elif action == 'toggle_is_admin':
-		# 	handle_toggle_is_admin(call, *args)
-		# elif action == 'toggle_is_interviewer':
-		# 	handle_toggle_is_interviewer(call, *args)
-		# elif action == 'assign_to_projects':
-		# 	handle_assign_to_projects(call, *args)
-		# elif action == 'assign_user_to_project':
-		# 	handle_assign_user_to_project(call, *args)
-		# elif action == 'assign_admin_to_project':
-		# 	handle_assign_admin_to_project(call, *args)
-		# else:
-		func = ACTION_RESOLVER.get(action)
-		if func:
-			func(call, *args)
-			return
-		print('NO HANDLER FOR ACTION: ', action)
+	# user = get_user(call)
+	# print('call', call)
+	# if user.is_admin or user.is_root: #todo: check security
+	callback = json.loads(call.data)
+	action = callback.get('action')
+	args = callback.get('args', [])
+	func = ACTION_RESOLVER.get(action)
+	if func:
+		func(call, *args)
+		return
+	print('NO HANDLER FOR ACTION: ', action)
 	bot.send_message(call.message.chat.id, 'No actions available')
 
 
@@ -82,6 +72,7 @@ def handle_help(message):
 	cmds = {
 		'help': 'Показать это сообщение',
 		'cancel': 'Прервать и выйти в главное меню',
+		'manage_projects': 'Управление моими проектами',
 	}
 	user = get_user(message)
 	if user.is_interviewer:
@@ -91,7 +82,7 @@ def handle_help(message):
 	if user.is_admin or user.is_root:
 		cmds.update(**{
 			'users': 'Показать список пользователей',
-			'manage_users': 'Раздать права всякие',
+			'manage_users': 'Управление правами пользователей',
 		})
 	bot.send_message(message.chat.id, '\n'.join([f'/{k} - {v}' for k, v in cmds.items()]))
 
@@ -149,7 +140,7 @@ def handle_start_survey_answer(message, questionnaire_id):
 # 	question = session.query(Question).filter(Question.step == 1).first()
 # 	bot.send_message(message.chat.id, f'Question: {question.code}, step: {question.step}, START')
 # 	msg = bot.send_message(message.chat.id, question.text, reply_markup=get_markup(question), )
-# 	if question.type == types.info:
+# 	if question.type.code == types.info:
 # 		time.sleep(SLEEP_AFTER_INFO)
 # 		handle_answer(msg, question=question)
 # 		return
@@ -168,27 +159,49 @@ def before_question_ask(question, message):
 		result_table = question.questionnaire.result_table
 		latitude, longitude = s.query(result_table.q2_latitude, result_table.q2_longitude).filter(result_table.started_by_id == message.from_user.id).first()
 		msg = ''
-		distance_tolerance = 4
+		distance_tolerance = 5
 		for shop in shops:
 			shop['distance'] = round(get_distance(latitude, longitude, lat2=shop['latitude'], lon2=shop['longitude']), 1)
 			msg += '\t{name}, distance: {distance}km\n'.format(**shop)
+		print('before_question_ask', 'question.categories', question.categories)
 		question.set_filter(func=lambda cat: shops[int(cat.code) - 1]['distance'] < distance_tolerance)
+		print('before_question_ask after filter', 'question.categories', question.categories)
 		bot.send_message(message.chat.id, f'All shops are:\n{msg}But only the ones within {distance_tolerance}km will be available for selection.')
+		if len(question.categories) == 0:
+			closest = sorted(shops, key=lambda a: a['distance'])[0]
+			bot.send_message(
+				message.chat.id,
+				'Ни одного магазина поблизости :( Попробуй подойти ближе и отправить точку еще раз\nЕсли что ближайший в {distance}км от тебя:\n{name}, {address}'.format(
+					**closest
+				)
+			)
 
 
 def check_data(question, message):
-	if question.type == QuestionTypes.location and message.content_type != QuestionTypes.location:
+	if question.type.code == QuestionTypes.location and message.content_type != QuestionTypes.location:
 		# print('check_data')
 		raise DataCheckError('Location error')
-	if question.type == QuestionTypes.categorical:
+	elif question.type.code == QuestionTypes.categorical:
 		ok = message.text in [i.text for i in question.categories]
 		if not ok:
 			raise DataCheckError('Category {} doesn\'t exist'.format(message.text))
+	elif question.type.code == QuestionTypes.photo and message.content_type != QuestionTypes.photo:
+		raise DataCheckError('Not a photo error')
+	elif question.type.code in {QuestionTypes.text, QuestionTypes.integer} and message.content_type != QuestionTypes.text:
+		raise DataCheckError('Not a text error')
+	elif question.type.code == QuestionTypes.integer:
+		if not message.text.isnumeric():
+			try:
+				float(message.text)
+			except ValueError:
+				raise DataCheckError('Not a number error')
+	print('warning: data check is not handled for ', question.code, question.type)
 	return True
 
 
 
 def handle_save(question, message): #todo handle all saves to db
+	print('handle_save', question.code)
 	if not question.save_in_survey:
 		return
 	check_data(question, message)
@@ -198,11 +211,52 @@ def handle_save(question, message): #todo handle all saves to db
 	except (DetachedInstanceError, ProgrammingError):
 		question = session.query(Question).filter(Question.id == question.id).first()
 		response = question.get_response_object(message.from_user.id)
-	if question.type == QuestionTypes.location:
+
+	if question.type.code == QuestionTypes.categorical:
+		code = None
+		for cat in question.categories:
+			if cat.text == message.text:
+				code = cat.id
+				break
+		response.__setattr__(question.code, code)
+		session.add(response)
+		session.commit()
+	elif question.type.code == QuestionTypes.location:
 		response.__setattr__(f'{question.code}_latitude', message.location.latitude)
 		response.__setattr__(f'{question.code}_longitude', message.location.longitude)
 		session.add(response)
 		session.commit()
+	elif question.type.code == QuestionTypes.photo:
+		file_info = bot.get_file(message.photo[-1].file_id)
+		print('handle_save', 'photo', file_info)
+		downloaded_file = bot.download_file(file_info.file_path)
+		file_name = '{}_{}'.format(message.from_user.id, file_info.file_path.split('/')[-1])
+		file_folder = Path(MEDIA_FOLDER, question.questionnaire.results_table_name)
+		file_path = Path(file_folder, file_name)
+		# file_path.mkdir(parents=True)
+		try:
+			with open(file_path, 'wb') as out:
+				out.write(downloaded_file)
+		except FileNotFoundError:
+			file_folder.mkdir(parents=True)
+			with open(file_path, 'wb') as out:
+				out.write(downloaded_file)
+		print('handle_save', 'file saved', file_path)
+		print('handle_save', 'file saved relative', str(file_path.relative_to(ROOT_DIR)))
+		response.__setattr__(question.code, str(file_path.relative_to(ROOT_DIR)))
+		session.add(response)
+		session.commit()
+	elif question.type.code == QuestionTypes.timestamp:
+		response.__setattr__(question.code, datetime.datetime.now())
+		session.add(response)
+		session.commit()
+	elif question.type.code == QuestionTypes.text or question.type.code == QuestionTypes.integer:
+		print('TEXT Q TYPE', message.content_type, message.content_type == 'text')
+		response.__setattr__(question.code, message.text)
+		session.add(response)
+		session.commit()
+	else:
+		print('handle_save', 'QUESTION TYPE NOT HANDLED FOR SAVE', question.type)
 
 
 
@@ -211,22 +265,26 @@ def handle_save(question, message): #todo handle all saves to db
 	# logger.info(' '.join(('question', repr(question), 'is saved to db with:', str(message.json))))
 def handle_datacheck_error(question, message, error, flags):
 	if question.code == 'shops' and message.content_type == QuestionTypes.location:
-		# handle_save(get_previous_question(question), message)
+		handle_save(get_previous_question(question), message)
 		# msg = bot.send_message(message.chat.id, question.text, reply_markup=get_markup(question), )
-		handle_answer(message, question=get_previous_question(question))
+		# handle_answer(message, question=get_previous_question(question))
 		# bot.register_next_step_handler(message, handle_answer, question=question, flags={Flags.goto_start})
-		if Flags.no_step_register not in flags:
-			bot.register_next_step_handler(message, handle_answer, question=question, flags={Flags.no_step_register})
-		return
+		# if Flags.no_step_register not in flags:
+		# 	bot.register_next_step_handler(message, handle_answer, question=question, flags={Flags.no_step_register})
+		# return
+
 	else:
 		bot.send_message(message.chat.id, error.msg)
-	msg = bot.send_message(message.chat.id, question.text, reply_markup=get_markup(question), )
-	if Flags.previous_question in flags:
-		if Flags.no_step_register not in flags:
-			bot.register_next_step_handler(msg, handle_answer, question=get_previous_question(question))
-	else:
-		if Flags.no_step_register not in flags:
-			bot.register_next_step_handler(msg, handle_answer, question=question)
+	flags.add(Flags.goto_start)
+	handle_answer(message, question=question, flags=flags)
+	# msg = bot.send_message(message.chat.id, question.text, reply_markup=get_markup(question), )
+	# if Flags.previous_question in flags:
+	# 	if Flags.no_step_register not in flags:
+	# 		print('Flags.previous_question in flags')
+	# 		bot.register_next_step_handler(msg, handle_answer, question=get_previous_question(question))
+	# else:
+	# 	if Flags.no_step_register not in flags:
+	# 		bot.register_next_step_handler(msg, handle_answer, question=question)
 
 class Flags:
 	goto_start = 'goto_start'
@@ -238,6 +296,8 @@ class Flags:
 
 def handle_answer(message, *args, **kwargs):
 	flags = kwargs.get('flags', set())
+	# print('handle_answer', 'kwargs', kwargs)
+	# print('handle_answer', 'flags', flags)
 
 	if message.text == '/start':
 		handle_start(message)
@@ -282,10 +342,14 @@ def handle_answer(message, *args, **kwargs):
 
 	before_question_ask(question, message)
 
-	if question.type in {QuestionTypes.info, QuestionTypes.sticker}:
+	if question.type.code in {QuestionTypes.info, QuestionTypes.sticker}:
 		msg = bot.send_message(message.chat.id, question.text, reply_markup=get_markup(question), )
 		time.sleep(SLEEP_AFTER_INFO)
 		handle_answer(msg, question=question)
+		return
+	if question.type.code == QuestionTypes.timestamp:
+		handle_save(question, message)
+		handle_answer(message, question=question)
 		return
 
 	msg = bot.send_message(message.chat.id, question.text, reply_markup=get_markup(question))

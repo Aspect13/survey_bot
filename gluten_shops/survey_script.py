@@ -1,4 +1,4 @@
-﻿from emoji import emojize
+﻿from emoji import emojize as _emojize
 
 from survey.survey_builder import _get_questionnaire, _save
 from survey.models import Question, QuestionTypes as types, Session, Category, User
@@ -22,11 +22,14 @@ questionnaire = get_questionnaire(session=session, created_by=me)
 def save(q, make_step=True):
 	global ROUTE_STEP
 	step = ROUTE_STEP if make_step else None
-	saved = _save(q, questionnaire, step=step, session=session, allow_overwrite=ALLOW_OVERWRITE)
+	saved = _save(q, questionnaire, step=step, allow_overwrite=ALLOW_OVERWRITE, session=session)
 	if make_step:
 		ROUTE_STEP += 1
 	return saved
 
+
+def emojize(s):
+	return _emojize(s, use_aliases=True)
 
 #
 #
@@ -69,7 +72,7 @@ save(q)
 q = Question()
 q.code = 'shops'
 q.type = types.categorical
-q.text = 'Вот найденные магазины :right_arrow_curving_down:'
+q.text = emojize('Вот найденные магазины :right_arrow_curving_down:')
 cats = [Category(text='{name} ({address})'.format(**i)) for i in shops]
 q.categories = cats
 save(q)

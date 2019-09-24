@@ -19,14 +19,16 @@ def get_markup(question):
 	# if q.type == info or q.type == photo:
 	# 	return ReplyKeyboardRemove()
 	if question.type == QuestionTypes.location:
-		markup = ReplyKeyboardMarkup(one_time_keyboard=True)
+		markup = ReplyKeyboardMarkup()
 		buttons = KeyboardButton(text=question.categories[0].text, request_location=True)
 		markup.add(buttons)
 		return markup
 	if question.type == QuestionTypes.categorical:
 		markup = ReplyKeyboardMarkup(one_time_keyboard=True)
-		buttons = (KeyboardButton(text=i.text) for i in question.categories)
-		markup.add(*buttons)
+		# buttons = (KeyboardButton(text=i.text) for i in question.categories)
+		# markup.add(*buttons)
+		for i in question.categories:
+			markup.add(KeyboardButton(text=i.text))
 		return markup
 	return ReplyKeyboardRemove()
 

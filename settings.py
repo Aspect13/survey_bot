@@ -39,3 +39,6 @@ SLEEP_AFTER_INFO = 3
 
 # routing
 CACHE_QUERIES = False
+
+MY_TG = int(open(Path(ROOT_DIR, 'cert', 'tg_id.txt'), 'r').read())
+MEDIA_FOLDER = Path(ROOT_DIR, 'Media')

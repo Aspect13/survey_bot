@@ -1,5 +1,5 @@
 import datetime
-import json
+
 from sqlalchemy import create_engine, Column, String, Integer, ForeignKey, DateTime, Boolean, UniqueConstraint, \
 	Table, MetaData
 from sqlalchemy.ext.automap import automap_base
@@ -7,7 +7,7 @@ from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, relationship, scoped_session
 from sqlalchemy_utils import ChoiceType
 
-from settings import DB_PATH, USER_FILE
+from settings import DB_PATH, MY_TG
 
 engine = create_engine(f'sqlite:///{DB_PATH}', echo=__name__ == '__main__')
 # Session = sessionmaker(bind=engine)
@@ -131,7 +131,8 @@ class Question(Base):
 	step = Column(Integer, )
 
 	# categories = relationship('Category', back_populates='question', cascade='all, delete, delete-orphan', )
-	categories = relationship('Category', backref='question', cascade='all, delete, delete-orphan', )
+	original_categories = relationship('Category', backref='question', cascade='all, delete, delete-orphan', )
+	filtered_categories = None
 
 	# route_step = relationship('Route', back_populates='question', uselist=False, cascade='all, delete, delete-orphan')
 
@@ -156,16 +157,15 @@ class Question(Base):
 		return result
 
 
+	@property
+	def categories(self):
+		return self.original_categories if self.filtered_categories is None else self.filtered_categories
 
-
-	# def save(self, session=None):
-
-
-	original_categories = None
+	@categories.setter
+	def categories(self, value):
+		self.original_categories = value
 
 	def set_filter(self, categories=None, func=None, persist=True):
-		if not self.original_categories:
-			self.original_categories = self.categories
 		if categories:
 			# print(categories)
 			self.set_filter(
@@ -173,7 +173,7 @@ class Question(Base):
 				persist=persist
 			)
 		if persist:
-			self.categories = list(filter(func, self.original_categories))
+			self.filtered_categories = list(filter(func, self.original_categories))
 		return list(filter(func, self.original_categories))
 
 	def format_text(self, *args, **kwargs):
@@ -238,7 +238,7 @@ AdminToQuest = Table('admins_to_questionnaires', Base.metadata,
 class User(Base):
 	__tablename__ = 'users'
 
-	ADMIN_IDS = [305258161]
+	ADMIN_IDS = [MY_TG]
 
 	id = Column(Integer, primary_key=True)
 	tg_id = Column(Integer, unique=True, nullable=False,)
@@ -259,7 +259,7 @@ class User(Base):
 
 	@property
 	def is_root(self):
-		return self.tg_id == 305258161
+		return self.tg_id == MY_TG
 
 	def __repr__(self):
 		status = []
