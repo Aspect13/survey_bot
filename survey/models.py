@@ -1,7 +1,7 @@
 import datetime
 import json
 from sqlalchemy import create_engine, Column, String, Integer, ForeignKey, DateTime, Boolean, UniqueConstraint, \
-	Table
+	Table, MetaData
 from sqlalchemy.ext.automap import automap_base
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, relationship, scoped_session
@@ -14,7 +14,7 @@ engine = create_engine(f'sqlite:///{DB_PATH}', echo=__name__ == '__main__')
 session_factory = sessionmaker(bind=engine)
 Session = scoped_session(session_factory)
 Base = declarative_base()
-AutomapBase = automap_base(Base)
+# AutomapBase = automap_base(Base)
 
 
 # class Survey(Base):
@@ -24,6 +24,25 @@ AutomapBase = automap_base(Base)
 # 	questionnaire_id = Column(Integer, ForeignKey('questionnaires.id'), nullable=False)
 # 	questionnaire = relationship('Questionnaire', back_populates='surveys')
 
+def get_reflected_db(db_name):
+	metadata = MetaData()
+
+	# we can reflect it ourselves from a database, using options
+	# such as 'only' to limit what tables we look at...
+	metadata.reflect(engine, only=[db_name])
+
+	# ... or just define our own Table objects with it (or combine both)
+	# Table('user_order', metadata,
+	#                 Column('id', Integer, primary_key=True),
+	#                 Column('user_id', ForeignKey('user.id'))
+	#             )
+
+	# we can then produce a set of mappings from this MetaData.
+	Base = automap_base(metadata=metadata)
+
+	# calling prepare() just sets up mapped classes and relationships.
+	Base.prepare()
+	return Base.classes[db_name]
 
 class Questionnaire(Base):
 	__tablename__ = 'questionnaires'
@@ -48,6 +67,15 @@ class Questionnaire(Base):
 	created_by_id = Column(Integer, ForeignKey('users.id'), nullable=True)
 	# surveys = relationship('Survey', back_populates='questionnaire')
 
+	_result_table = None
+
+	@property
+	def result_table(self):
+		if self._result_table:
+			return self._result_table
+		self._result_table = get_reflected_db(self.results_table_name)
+		return self._result_table
+
 	def __repr__(self):
 		return f'<Questionnaire {self.name} v{self.version}  {"(active)" if self.is_active else "(not active)"}>'
 
@@ -62,6 +90,7 @@ class QuestionTypes:
 	datetime = 'datetime'
 	timestamp = 'timestamp'
 	integer = 'integer'
+	constraint = 'constraint'
 
 	def __iter__(self):
 		return ((i, i) for i in filter(lambda attr: not attr.startswith('__'), QuestionTypes.__dict__))
@@ -107,6 +136,11 @@ class Question(Base):
 
 	questionnaire_id = Column(Integer, ForeignKey('questionnaires.id'), nullable=False)
 	# questionnaire = relationship('Questionnaire', back_populates='questions')
+
+	@property
+	def should_be_saved_in_survey(self):
+		print(self.type)
+		return self.type not in {QuestionTypes.sticker, QuestionTypes.info, QuestionTypes.constraint}
 
 
 	# def save(self, session=None):
@@ -235,7 +269,6 @@ def recreate_all(session=None):
 	session = Session()
 	for table in tables:
 		session.execute('drop table if exists {}'.format(table))
-	# Base.prepare()
 	Base.metadata.create_all(engine)
 
 

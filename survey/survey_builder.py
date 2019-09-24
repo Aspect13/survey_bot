@@ -28,12 +28,12 @@ def _get_questionnaire(q_name, q_version, q_description, session=None, **kwargs)
 	return quest
 
 
-def _save(question, questionnaire, step=None, category_code_start=1, allow_overwrite=True, session=None):
+def _save(question, questionnaire, step=None, force_save_in_survey=None, category_code_start=1, allow_overwrite=True, session=None):
 	if not session:
 		session = Session()
 	question.questionnaire = questionnaire
 	question.step = step
-	question.save_in_survey = question.type not in (QuestionTypes.info, QuestionTypes.sticker)
+	question.save_in_survey = force_save_in_survey if force_save_in_survey is not None else question.should_be_saved_in_survey
 	category_code = category_code_start
 	for i in question.categories:
 		i.code = i.code if i.code else category_code

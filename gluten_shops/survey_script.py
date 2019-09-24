@@ -19,23 +19,25 @@ me = session.query(User).filter(User.tg_id == 305258161).first()
 questionnaire = get_questionnaire(session=session, created_by=me)
 
 
-def save(q):
+def save(q, make_step=True):
 	global ROUTE_STEP
-	saved = _save(q, questionnaire, step=ROUTE_STEP, session=session, allow_overwrite=ALLOW_OVERWRITE)
-	ROUTE_STEP += 1
+	step = ROUTE_STEP if make_step else None
+	saved = _save(q, questionnaire, step=step, session=session, allow_overwrite=ALLOW_OVERWRITE)
+	if make_step:
+		ROUTE_STEP += 1
 	return saved
 
-
-
-shops = [
-	{'name': 'ГУМ', 'address': 'Красная площадь, 3, Москва, 109012', 'latitude': 55.7546942, 'longitude': 37.6214334},
-]
 
 #
 #
 # Here go questions:
 #
 #
+
+shops = [
+	{'name': 'ГУМ', 'address': 'Красная площадь, 3, Москва, 109012', 'latitude': 55.7546942, 'longitude': 37.6214334},
+]
+
 
 yes_no_cats = lambda: [
     Category(text=emojize('Да :simple_smile:')),
@@ -73,7 +75,7 @@ q = Question()
 q.code = 'shops'
 q.type = types.categorical
 q.text = 'Вот найденные магазины:'
-cats = [Category(text=f'{i["name"]} ({i["address"]})') for i in shops]
+cats = [Category(text='{name} ({address})'.format(**i)) for i in shops]
 q.categories = cats
 save(q)
 
@@ -523,3 +525,10 @@ q.code = 'q66'
 q.type = types.info
 q.text = emojize('Если бы я был человеком, то хотел бы иметь такого друга как ты! До встречи в новом магазине! :wink:')
 save(q)
+
+
+q = Question()
+q.code = 'uc_1'
+q.type = types.constraint
+q.text = 'started_by_id,shops'
+save(q, make_step=False)

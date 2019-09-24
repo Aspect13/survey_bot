@@ -1,194 +1,39 @@
 import json
 import time
+from operator import and_
 
 from settings import SLEEP_AFTER_INFO, TMP_FILE
-from survey.models import Session, Question, User, QuestionTypes as types, Questionnaire
-from tg_bot.tg_bot_utils import bot, run_polling, logger
+from survey.models import Session, Question, User, QuestionTypes as types, Questionnaire, QuestionTypes
+from tg_bot.server import bot, run_polling, logger
+from tg_bot.helper import get_markup, DataCheckError, build_callback
+from tg_bot.user_management import get_user, handle_user_edit, handle_toggle_is_admin, handle_toggle_is_interviewer, \
+	handle_assign_to_projects, handle_assign_user_to_project, handle_assign_admin_to_project
 from utils import get_distance
 from telebot.types import ReplyKeyboardMarkup, KeyboardButton, ReplyKeyboardRemove, InlineKeyboardMarkup, \
 	InlineKeyboardButton
 
 
-def get_markup(question):
-	# if q.type == info or q.type == photo:
-	# 	return ReplyKeyboardRemove()
-	if question.type == types.location:
-		markup = ReplyKeyboardMarkup(one_time_keyboard=True)
-		buttons = KeyboardButton(text=question.categories[0].text, request_location=True)
-		markup.add(buttons)
-		return markup
-	if question.type == types.categorical:
-		markup = ReplyKeyboardMarkup(one_time_keyboard=True)
-		buttons = (KeyboardButton(text=i.text) for i in question.categories)
-		markup.add(*buttons)
-		return markup
-	return ReplyKeyboardRemove()
-
-
-class DataCheckError(Exception):
-	def __init__(self, *args):
-		self.msg = 'Wrong data provided'
-		if not args:
-			args += (self.msg, )
-		else:
-			self.msg = args[0]
-		super().__init__(self, *args)
-
-
-def warn_admins(text, session=None):
-	if not session:
-		session = Session()
-	admins = session.query(User).filter(User.is_admin).all()
-	for user in admins:
-		# bot.send_message(user.chat_id, text)
-		bot.send_message(user.tg_id, text)
-
-
-def create_user(message, session=None):
-	if not session:
-		session = Session()
-	user = User(
-		tg_id=message.from_user.id,
-		first_name=message.from_user.first_name,
-		last_name=message.from_user.last_name,
-		# chat_id=message.chat.id,
-		username=message.from_user.username,
-	)
-	user.is_admin = user.tg_id in User.ADMIN_IDS
-	session.add(user)
-	session.commit()
-	print('NEW USER ', user)
-	print('NEW USER id', user.id)
-	warn_admins('New user joined: {}'.format(repr(user)), session)
-	return user
-
-
-def get_user(message, session=None):
-	if not session:
-		session = Session()
-	user = session.query(User).filter(User.tg_id == message.from_user.id).first()
-	if not user:
-		user = create_user(message, session)
-	return user
-
-
-def build_callback(action, *args):
-	d = dict()
-	d['action'] = action
-	d['args'] = args
-	# d['kwargs'] = kwargs
-	return json.dumps(d)
-
-
-@bot.message_handler(commands=['manage_users'])
-def handle_manage_users(message):
-	user = get_user(message)
-	if user.is_admin or user.is_root:
-		markup = InlineKeyboardMarkup()
-		session = Session()
-		users = session.query(User).all()
-		# u_list = '\n'.join([f'/{i.id}' for i in users])
-		for i in users:
-			btn = InlineKeyboardButton(repr(i), callback_data=build_callback('select_user', i.tg_id))
-			markup.add(btn)
-		bot.send_message(message.chat.id, 'Выбери пользователя для редактирования:', reply_markup=markup)
-	else:
-		bot.send_message(message.chat.id, repr(user))
-
-
-@bot.message_handler(commands=['manage_projects'])
-def handle_manage_projects(message):
-	user = get_user(message)
-	if user.is_admin or user.is_root:
-		markup = InlineKeyboardMarkup()
-		session = Session()
-		users = session.query(User).all()
-		# u_list = '\n'.join([f'/{i.id}' for i in users])
-		for i in users:
-			btn = InlineKeyboardButton(repr(i), callback_data=build_callback('select_user', i.tg_id))
-			markup.add(btn)
-		bot.send_message(message.chat.id, 'Выбери пользователя для редактирования:', reply_markup=markup)
-	else:
-		bot.send_message(message.chat.id, repr(user))
-
-
-def handle_toggle_is_admin(call, tg_id):
+def handle_start_survey(call, questionnaire_id):
+	print('handle_start_survey', questionnaire_id)
 	session = Session()
-	selected_user = session.query(User).filter(User.tg_id == tg_id).first()
-	selected_user.is_admin = not selected_user.is_admin
-	session.add(selected_user)
-	session.commit()
-	bot.answer_callback_query(
-		call.id,
-		f'Selected user {selected_user} is {"" if selected_user.is_admin else " NOT"} an admin now'
-	)
-	bot.send_message(
-		call.message.chat.id,
-		f'Selected user {selected_user} is {"" if selected_user.is_admin else " NOT"} an admin now'
-	)
+	name, description = session.query(Questionnaire.name, Questionnaire.description).filter(Questionnaire.id == questionnaire_id).first()
+	markup = ReplyKeyboardMarkup(one_time_keyboard=True)
+	buttons = (KeyboardButton(text='Да'), KeyboardButton(text='Нет'))
+	markup.add(*buttons)
+	msg = bot.send_message(call.message.chat.id, f'Начать опрос {name}?\n({description})', reply_markup=markup)
+	bot.register_next_step_handler(msg, handle_start_survey_answer, questionnaire_id)
 
 
-def handle_toggle_is_interviewer(call, tg_id):
-	session = Session()
-	selected_user = session.query(User).filter(User.tg_id == tg_id).first()
-	selected_user.is_interviewer = not selected_user.is_interviewer
-	session.add(selected_user)
-	session.commit()
-	bot.answer_callback_query(
-		call.id,
-		f'Selected user {selected_user} is {"" if selected_user.is_interviewer else " NOT"} an interviewer now'
-	)
-	bot.send_message(
-		call.message.chat.id,
-		f'Selected user {selected_user} is {"" if selected_user.is_interviewer else " NOT"} an interviewer now'
-	)
-
-
-def handle_assign_to_projects(call, tg_id):
-	session = Session()
-	projects = session.query(Questionnaire).all()
-	markup = InlineKeyboardMarkup()
-	for i in projects:
-		btn_project = InlineKeyboardButton(repr(i), callback_data='dummy')
-		btn_interviever = InlineKeyboardButton('as interviewer',
-		                                       callback_data=build_callback('assign_user_to_project', tg_id, i.id))
-		btn_admin = InlineKeyboardButton('as admin',
-		                                 callback_data=build_callback('assign_admin_to_project', tg_id, i.id))
-		markup.add(btn_project)
-		markup.add(btn_interviever, btn_admin)
-	bot.send_message(call.message.chat.id, 'Select projects to toggle for assignment:', reply_markup=markup)
-
-
-def handle_assign_user_to_project(call, tg_id, project_id):
-	session = Session()
-	selected_user = session.query(User).filter(User.tg_id == tg_id).first()
-	selected_project = session.query(Questionnaire).filter(Questionnaire.id == project_id).first()
-	if selected_project in selected_user.available_questionnaires:
-		selected_user.available_questionnaires.remove(selected_project)
-		bot.answer_callback_query(call.id, f'{selected_user} is NOT an interviewer in {selected_project}')
-		bot.send_message(call.message.chat.id, f'{selected_user} is NOT an interviewer in {selected_project}')
-	else:
-		selected_user.available_questionnaires.append(selected_project)
-		bot.answer_callback_query(call.id, f'{selected_user} IS an interviewer in {selected_project}')
-		bot.send_message(call.message.chat.id, f'{selected_user} IS an interviewer in {selected_project}')
-	session.add(selected_user)
-	session.commit()
-
-
-def handle_assign_admin_to_project(call, tg_id, project_id):
-	session = Session()
-	selected_user = session.query(User).filter(User.tg_id == tg_id).first()
-	selected_project = session.query(Questionnaire).filter(Questionnaire.id == project_id).first()
-	if selected_project in selected_user.admin_of_projects:
-		selected_user.admin_of_projects.remove(selected_project)
-		bot.answer_callback_query(call.id, f'{selected_user} is NOT an admin in {selected_project}')
-		bot.send_message(call.message.chat.id, f'{selected_user} is NOT an admin in {selected_project}')
-	else:
-		selected_user.admin_of_projects.append(selected_project)
-		bot.answer_callback_query(call.id, f'{selected_user} IS an admin in {selected_project}')
-		bot.send_message(call.message.chat.id, f'{selected_user} IS an admin in {selected_project}')
-	session.add(selected_user)
-	session.commit()
+ACTION_RESOLVER = {
+	'select_user': handle_user_edit,
+	'toggle_is_admin': handle_toggle_is_admin,
+	'toggle_is_interviewer': handle_toggle_is_interviewer,
+	'assign_to_projects': handle_assign_to_projects,
+	'assign_user_to_project': handle_assign_user_to_project,
+	'assign_admin_to_project': handle_assign_admin_to_project,
+	'start_survey': handle_start_survey,
+	'select_project': None,
+}
 
 
 @bot.callback_query_handler(func=lambda call: True)
@@ -197,76 +42,36 @@ def callback_query(call):
 		print('No call data')
 		return
 	user = get_user(call)
-	print(call)
+	print('call', call)
 	# with open(TMP_FILE, 'w') as out:
 	# 	out.write(str(call))
 
 	if user.is_admin or user.is_root:
 		callback = json.loads(call.data)
 		action = callback.get('action')
-		if action == 'select_user':
-			# tg_id = callback.get('kwargs').get('selected_user_id')
-			tg_id = callback.get('args')[0]
-			bot.answer_callback_query(call.id, f'Selected user #{tg_id}')
-			handle_edit(call, selected_user_id=tg_id)
-		elif action == 'toggle_is_admin':
-			handle_toggle_is_admin(call, *callback.get('args'))
-		elif action == 'toggle_is_interviewer':
-			handle_toggle_is_interviewer(call, *callback.get('args'))
-		elif action == 'assign_to_projects':
-			handle_assign_to_projects(call, *callback.get('args'))
-		elif action == 'assign_user_to_project':
-			handle_assign_user_to_project(call, *callback.get('args'))
-		elif action == 'assign_admin_to_project':
-			handle_assign_admin_to_project(call, *callback.get('args'))
-		else:
-			bot.send_message(call.message.chat.id, 'No actions available')
-		return
+		args = callback.get('args', [])
+		# if action == 'select_user':
+		# 	handle_edit(call, *args)
+		# elif action == 'toggle_is_admin':
+		# 	handle_toggle_is_admin(call, *args)
+		# elif action == 'toggle_is_interviewer':
+		# 	handle_toggle_is_interviewer(call, *args)
+		# elif action == 'assign_to_projects':
+		# 	handle_assign_to_projects(call, *args)
+		# elif action == 'assign_user_to_project':
+		# 	handle_assign_user_to_project(call, *args)
+		# elif action == 'assign_admin_to_project':
+		# 	handle_assign_admin_to_project(call, *args)
+		# else:
+		func = ACTION_RESOLVER.get(action)
+		if func:
+			func(call, *args)
+			return
+		print('NO HANDLER FOR ACTION: ', action)
 	bot.send_message(call.message.chat.id, 'No actions available')
 
 
-def handle_edit(call, **kwargs):
-	session = Session()
-	user = get_user(call, session=session)
-	selected_user = session.query(User).filter(User.tg_id == kwargs.get('selected_user_id')).first()
-	if user.is_admin or user.is_root:
-		list_display = lambda iterable: '[\n\t' + ",\n\t".join([repr(i) for i in iterable]) + '\n]'
-		fields = {
-			'telegram_id': selected_user.tg_id,
-			'first_name': selected_user.first_name,
-			'last_name': selected_user.last_name,
-			'is admin': selected_user.is_admin,
-			'is interviewer': selected_user.is_interviewer,
-			'projects': list_display(selected_user.available_questionnaires),
-			'admin_of': list_display(selected_user.admin_of_projects)
-		}
 
-		markup = InlineKeyboardMarkup(row_width=2)
-		btn_is_admin = InlineKeyboardButton('Toggle: is admin', callback_data=build_callback('toggle_is_admin', selected_user.tg_id))
-		btn_is_interviewer = InlineKeyboardButton('Toggle: is interviewer', callback_data=build_callback('toggle_is_interviewer', selected_user.tg_id))
-		markup.add(btn_is_admin, btn_is_interviewer)
-		btn_assign_to_projects = InlineKeyboardButton('Assign to projects', callback_data=build_callback('assign_to_projects', selected_user.tg_id))
-		markup.add(btn_assign_to_projects)
-		# btn_assign_admin = InlineKeyboardButton('Assign as admin', callback_data=build_callback('assign_admin', selected_user.tg_id))
-		# markup.add(btn_assign_admin)
-
-		msg = []
-		msg.append(f'Editing {repr(selected_user)}:')
-		for k, v in fields.items():
-			msg.append(f'{k}: {v}')
-		bot.send_message(call.message.chat.id, '\n'.join(msg), reply_markup=markup)
-
-
-
-@bot.message_handler(commands=['users'])
-def handle_users(message):
-	user = get_user(message)
-	if user.is_admin or user.is_root:
-		session = Session()
-		users = session.query(User).all()
-		bot.send_message(message.chat.id, '\n'.join([repr(i) for i in users]))
-	else:
-		bot.send_message(message.chat.id, repr(user))
 
 
 @bot.message_handler(commands=['help'])
@@ -298,29 +103,54 @@ def handle_start(message):
 
 
 @bot.message_handler(commands=['cancel'])
-def handle_start(message):
+def handle_cancel(message):
 	bot.send_message(message.chat.id, 'Ok, вернемся в начало.')
 	handle_help(message)
 	return
 
 
 @bot.message_handler(commands=['surveys'])
-def handle_start(message, *args, **kwargs):
+def handle_surveys(message, *args, **kwargs):
+	inactive_count = 0
 	user = get_user(message)
-	surveys = '\n'.join(str(i) for i in user.available_questionnaires)
-	bot.send_message(message.chat.id, f'Доступно {len(user.available_questionnaires)}:\n{surveys}')
+	markup = InlineKeyboardMarkup()
+	for i in user.available_questionnaires:
+		if i.is_active:
+			btn = InlineKeyboardButton(str(i), callback_data=build_callback('start_survey', i.id))
+			markup.add(btn)
+		elif user.is_admin or user.is_root:
+			inactive_count += 1
+
+	bot.send_message(message.chat.id, f'Доступно {len(user.available_questionnaires) - inactive_count}:\n', reply_markup=markup)
+	if inactive_count and (user.is_admin or user.is_root):
+		bot.send_message(message.chat.id, f'There are {inactive_count} inactive projects, /manage_projects')
 
 
-def start_survey(message, *args, **kwargs):
-	session = Session()
-	question = session.query(Question).filter(Question.step == 1).first()  # todo change to step = 1
-	bot.send_message(message.chat.id, f'Question: {question.code}, step: {question.route_step.step}, START')
-	msg = bot.send_message(message.chat.id, question.text, reply_markup=get_markup(question), )
-	if question.type == types.info:
-		time.sleep(SLEEP_AFTER_INFO)
-		handle_answer(msg, question=question)
-		return
-	bot.register_next_step_handler(msg, handle_answer, question=question)
+
+
+
+
+def handle_start_survey_answer(message, questionnaire_id):
+	print('handle_start_survey_answer', questionnaire_id)
+	if message.text == 'Да':
+		session = Session()
+		question = session.query(Question).filter(and_(Question.questionnaire_id == questionnaire_id, Question.step == 1)).first()
+		handle_answer(message, question=question, flags={Flags.goto_start})
+	else:
+		handle_cancel(message)
+
+
+
+# def start_survey(message, *args, **kwargs):
+# 	session = Session()
+# 	question = session.query(Question).filter(Question.step == 1).first()
+# 	bot.send_message(message.chat.id, f'Question: {question.code}, step: {question.step}, START')
+# 	msg = bot.send_message(message.chat.id, question.text, reply_markup=get_markup(question), )
+# 	if question.type == types.info:
+# 		time.sleep(SLEEP_AFTER_INFO)
+# 		handle_answer(msg, question=question)
+# 		return
+# 	bot.register_next_step_handler(msg, handle_answer, question=question)
 
 
 def check_data(question, message):
@@ -328,14 +158,16 @@ def check_data(question, message):
 		# print('check_data')
 		raise DataCheckError('Location error')
 	if question.type == types.categorical:
-		for i in question.categories:
-			if i.text == message.text:
-				return True
-		raise DataCheckError('Category doesn\'t exist error')
+		ok = message.text in [i.text for i in question.categories]
+		# for i in question.categories:
+		# 	if i.text == message.text:
+		# 		return True
+		if not ok:
+			raise DataCheckError('Category {} doesn\'t exist'.format(message.text))
 	return True
 
 
-def handle_save(question, message): #todo hadle all saves to db
+def handle_save(question, message): #todo handle all saves to db
 	if not question.save_in_survey:
 		return
 	check_data(question, message)
@@ -346,42 +178,51 @@ def handle_save(question, message): #todo hadle all saves to db
 	# logger.info(' '.join(('question', repr(question), 'is saved to db with:', str(message.json))))
 
 
+class Flags:
+	goto_start = 'goto_start'
+	terminate = 'terminate'
+
+
 def handle_answer(message, *args, **kwargs):
-	question = kwargs.get('question')
 	if message.text == '/start':
 		handle_start(message)
-		return
+	if message.text == '/cancel':
+		handle_cancel(message)
+	if message.text == '/help':
+		handle_help(message)
+
+	flags = kwargs.get('flags', {})
+	if Flags.terminate in flags:
+		terminate(message)
+
+	question = kwargs.get('question')
+
+	if Flags.goto_start not in flags:
+		if not question:
+			terminate(message)
+		try:
+			handle_save(question, message)
+		except DataCheckError as e:
+			bot.send_message(message.chat.id, e.msg)
+			msg = bot.send_message(message.chat.id, question.text, reply_markup=get_markup(question), )
+			bot.register_next_step_handler(msg, handle_answer, question=question)
+			return
+
+		# after_question_ask(question, message)
+		bot.send_message(message.chat.id, f'Question: {question.code}, step: {question.step}, END')
+		question = get_next_question(question)
 
 	if not question:
 		terminate(message)
 
-
-
 	try:
-		handle_save(question, message)
-	except DataCheckError as e:
-		bot.send_message(message.chat.id, e.msg)
-		msg = bot.send_message(message.chat.id, question.text, reply_markup=get_markup(question), )
-		bot.register_next_step_handler(msg, handle_answer, question=question)
-		return
-
-	# after_question_ask(question, message)
-
-	bot.send_message(message.chat.id, f'Question: {question.code}, step: {question.route_step.step}, END')
-
-	question = get_next_question(question)
-
-	if not question:
-		terminate(message)
-
-	try:
-		bot.send_message(message.chat.id, f'Question: {question.code}, step: {question.route_step.step}, START')
+		bot.send_message(message.chat.id, f'Question: {question.code}, step: {question.step}, START')
 	except AttributeError:
 		terminate(message)
 
 	# before_question_ask(question, message)
 
-	if question.type == types.info:
+	if question.type in {QuestionTypes.info, QuestionTypes.sticker}:
 		msg = bot.send_message(message.chat.id, question.text, reply_markup=get_markup(question), )
 		time.sleep(SLEEP_AFTER_INFO)
 		handle_answer(msg, question=question)
@@ -398,7 +239,7 @@ def terminate(message):
 
 def get_next_question(question):
 	session = Session()
-	return session.query(Question).filter(Question.step == question.route_step.step + 1).first()
+	return session.query(Question).filter(Question.step == question.step + 1).first()
 
 
 if __name__ == '__main__':

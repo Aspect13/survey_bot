@@ -1,10 +1,11 @@
 import datetime
 
-from sqlalchemy import Table, Column, MetaData, Integer, String, Float, DateTime, ForeignKey
+from sqlalchemy import Table, Column, MetaData, Integer, String, Float, DateTime, ForeignKey, UniqueConstraint
+from sqlalchemy.ext.automap import automap_base
 from sqlalchemy.orm import relationship, mapper
 from sqlalchemy_utils import ChoiceType
 
-from survey.models import engine, QuestionTypes, Session, Questionnaire, AutomapBase, User, Category, Base, recreate_all
+from survey.models import engine, QuestionTypes, Session, Category, User
 
 
 def create_column_types(defined_categories):
@@ -19,6 +20,7 @@ DEFAULT_COLUMNS = [
 	Column('last_filled_question_name', String, default=None, nullable=True),
 	Column('started_by_id', Integer, ForeignKey(User.id), nullable=False),
 	# Column('questionnaire_id', Integer, ForeignKey(Questionnaire.id), nullable=False),
+
 ]
 
 PROMISED_RELATIONSHIPS = {
@@ -33,11 +35,10 @@ def promise_relationship(relationship_name, relationship_value):
 
 def generate_columns(questionnaire):
 	result_table_columns = []
-	for q in filter(lambda i: i.save_in_survey, questionnaire.questions):
-		if q.type == QuestionTypes.text:
-			# print(q.code, q.type, q.text)
+	for q in filter(lambda i: i.save_in_survey or i.type.code == QuestionTypes.constraint, questionnaire.questions):
+		if q.type.code == QuestionTypes.text or q.type.code == QuestionTypes.photo:
 			result_table_columns.append(Column(q.code, String))
-		elif q.type == QuestionTypes.integer:
+		elif q.type.code == QuestionTypes.integer:
 			result_table_columns.append(Column(q.code, Integer))
 		elif q.type.code == QuestionTypes.location:
 			result_table_columns.append(Column(f'{q.code}_latitude', Float))
@@ -47,9 +48,11 @@ def generate_columns(questionnaire):
 			result_table_columns.append(Column(q.code, Integer, ForeignKey(Category.id), nullable=True),)
 			# result_table_columns.append(Column(f'{q.code}_id', ChoiceType(create_column_types((i.code for i in q.categories))), ForeignKey(Category.id), nullable=True),)
 			promise_relationship(q.code, relationship('Category', backref='results'))
+		elif q.type.code == QuestionTypes.constraint:
+			print(*q.text.split(','))
+			result_table_columns.append(UniqueConstraint(*q.text.split(','), name=q.code)),
 		else:
-			pass
-			print(NotImplementedError(f'The {q.type.code} type is not handled!!!'))
+			NotImplementedError(f'The {q.type.code} type is not handled!!!')
 	return result_table_columns
 
 
@@ -76,8 +79,7 @@ def generate_columns(questionnaire):
 
 
 def create_result_table(questionnaire):
-	# metadata = MetaData()
-	metadata = Base.metadata
+	metadata = MetaData()
 
 	result_table_columns = generate_columns(questionnaire)
 
@@ -86,15 +88,12 @@ def create_result_table(questionnaire):
 	ResultTable = Table(
 		questionnaire.results_table_name, metadata,
 		*DEFAULT_COLUMNS,
-		# relationship(User, back_populates='started_surveys', ),
 		*result_table_columns,
-		# autoload=True,
-		# autoload_with=engine
+
 		)
-	# ResultTable.questionnaire = questionnaire
+
 	for rel_name, rel_value in PROMISED_RELATIONSHIPS.items():
 		ResultTable.__setattr__(rel_name, rel_value)
-
 
 	s = Session()
 	try:
@@ -103,11 +102,7 @@ def create_result_table(questionnaire):
 		print(e)
 	metadata.create_all(bind=engine, tables=[ResultTable])
 
-	# mapper(Questionnaire, ResultTable, properties={
-	# 	'result_table_tst': ResultTable.c.status,
-	# }, non_primary=True)
-
-	# return ResultTable
+	return ResultTable
 
 
 # from gluten_shops.survey_script import questionnaire as qre
