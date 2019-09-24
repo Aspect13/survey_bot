@@ -2,7 +2,7 @@
 /.handler-saves/
 /venv/
 /cert/*
-/photos/*
+/photos/
 /Media/*
 
 *.log

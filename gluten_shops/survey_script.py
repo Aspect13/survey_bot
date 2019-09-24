@@ -38,12 +38,22 @@ def emojize(s):
 #
 
 shops = [
-	{'name': 'ГУМ', 'address': 'Красная площадь, 3, Москва, 109012', 'latitude': 55.7546942, 'longitude': 37.6214334},
+	{
+		'name': 'ГУМ',
+		'address': 'Красная площадь, 3, Москва, 109012',
+		'latitude': 55.7546942,
+		'longitude': 37.6214334
+	},
+	{
+		'name': 'ЦУМ',
+		'address': 'Петровка, 2, Москва, 125009',
+		'latitude': 55.7608749,
+		'longitude': 37.6198113
+	},
 ]
 
-
 yes_no_cats = lambda: [
-    Category(text=emojize('Да :simple_smile:')),
+    Category(text=emojize('Да :smile:')),
     Category(text=emojize('Нет :pensive:'))
 ]
 
