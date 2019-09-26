@@ -1,5 +1,6 @@
 ﻿from emoji import emojize as _emojize
 
+from gluten_shops.shops_special import shops
 from survey.survey_builder import _get_questionnaire, _save
 from survey.models import Question, QuestionTypes as types, Session, Category, User
 
@@ -36,21 +37,6 @@ def emojize(s):
 # Here go questions:
 #
 #
-
-shops = [
-	{
-		'name': 'ГУМ',
-		'address': 'Красная площадь, 3, Москва, 109012',
-		'latitude': 55.7546942,
-		'longitude': 37.6214334
-	},
-	{
-		'name': 'ЦУМ',
-		'address': 'Петровка, 2, Москва, 125009',
-		'latitude': 55.7608749,
-		'longitude': 37.6198113
-	},
-]
 
 yes_no_cats = lambda: [
     Category(text=emojize('Да :smile:')),

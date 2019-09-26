@@ -8,6 +8,7 @@ from sqlalchemy.exc import ProgrammingError
 from sqlalchemy.orm.exc import DetachedInstanceError
 from sqlalchemy_utils import Choice
 
+from gluten_shops.shops_special import shops
 from settings import SLEEP_AFTER_INFO, MEDIA_FOLDER, ROOT_DIR
 from survey.models import Session, Question, Questionnaire, QuestionTypes
 from tg_bot.server import bot, run_polling
@@ -146,23 +147,10 @@ def handle_start_survey_answer(message, questionnaire_id):
 # 		return
 # 	bot.register_next_step_handler(msg, handle_answer, question=question)
 
+
 def before_question_ask(question, message):
 	print('before_question_ask', question.code)
 	if question.code == 'shops':
-		shops = [
-			{
-				'name': 'ГУМ',
-				'address': 'Красная площадь, 3, Москва, 109012',
-				'latitude': 55.7546942,
-				'longitude': 37.6214334
-			},
-			{
-				'name': 'ЦУМ',
-				'address': 'Петровка, 2, Москва, 125009',
-				'latitude': 55.7608749,
-				'longitude': 37.6198113
-			},
-		]
 		s = Session()
 		result_table = question.questionnaire.result_table
 		latitude, longitude = s.query(result_table.q2_latitude, result_table.q2_longitude).filter(result_table.started_by_id == message.from_user.id).first()
