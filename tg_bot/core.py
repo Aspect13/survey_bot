@@ -32,17 +32,22 @@ def handle_start_survey(call, questionnaire_id):
 	bot.register_next_step_handler(msg, handle_start_survey_answer, questionnaire_id)
 
 
+def handle_inactive_survey(call, *args):
+	bot.send_message(call.message.chat.id, 'Этот опрос пока не активен')
+
+
 ACTION_RESOLVER = {
-	'select_user': handle_user_edit,
+	'user_edit': handle_user_edit,
 	'toggle_is_admin': handle_toggle_is_admin,
 	'toggle_is_interviewer': handle_toggle_is_interviewer,
 	'assign_to_projects': handle_assign_to_projects,
 	'assign_user_to_project': handle_assign_user_to_project,
 	'assign_admin_to_project': handle_assign_admin_to_project,
 	'start_survey': handle_start_survey,
-	'select_project': handle_project_edit,
+	'project_edit': handle_project_edit,
 	'toggle_is_active': handle_toggle_is_active,
 	'assign_users': handle_assign_users,
+	'inactive_survey': handle_inactive_survey,
 }
 
 
@@ -58,6 +63,7 @@ def callback_query(call):
 	action = callback.get('action')
 	args = callback.get('args', [])
 	func = ACTION_RESOLVER.get(action)
+	print('HANDLING ACTION: ', action)
 	if func:
 		func(call, *args)
 		return
@@ -113,10 +119,12 @@ def handle_surveys(message, *args, **kwargs):
 		if i.is_active:
 			btn = InlineKeyboardButton(str(i), callback_data=build_callback('start_survey', i.id))
 			markup.add(btn)
-		elif user.is_admin or user.is_root:
+		else:
+			btn = InlineKeyboardButton(str(i), callback_data=build_callback('inactive_survey'))
+			markup.add(btn)
 			inactive_count += 1
 
-	bot.send_message(message.chat.id, f'Доступно {len(user.available_questionnaires) - inactive_count}:\n', reply_markup=markup)
+	bot.send_message(message.chat.id, f'Доступно {len(user.available_questionnaires)} опросов ({len(user.available_questionnaires) - inactive_count} активных):\n', reply_markup=markup)
 	if inactive_count and (user.is_admin or user.is_root):
 		bot.send_message(message.chat.id, f'There are {inactive_count} inactive projects, /manage_projects')
 

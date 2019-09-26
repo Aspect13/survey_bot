@@ -18,8 +18,7 @@ def create_user(message, session=None):
 	user.is_admin = user.tg_id in User.ADMIN_IDS
 	session.add(user)
 	session.commit()
-	print('NEW USER ', user)
-	print('NEW USER id', user.id)
+	print('NEW USER ', user, user.id)
 	warn_admins('New user joined: {}'.format(repr(user)), session)
 	return user
 
@@ -62,7 +61,7 @@ def handle_manage_users(message):
 		users = session.query(User).all()
 		# u_list = '\n'.join([f'/{i.id}' for i in users])
 		for i in users:
-			btn = InlineKeyboardButton(repr(i), callback_data=build_callback('select_user', i.tg_id))
+			btn = InlineKeyboardButton(repr(i), callback_data=build_callback('user_edit', i.tg_id))
 			markup.add(btn)
 		bot.send_message(message.chat.id, 'Выбери пользователя для редактирования:', reply_markup=markup)
 	else:
@@ -78,7 +77,7 @@ def handle_manage_projects(message):
 	else:
 		projects = user.admin_of_projects
 	for i in projects:
-		btn = InlineKeyboardButton(repr(i), callback_data=build_callback('select_project', i.id))
+		btn = InlineKeyboardButton(repr(i), callback_data=build_callback('project_edit', i.id))
 		markup.add(btn)
 	bot.send_message(message.chat.id, 'Выбери проект для редактирования:', reply_markup=markup)
 
@@ -101,15 +100,19 @@ def handle_user_edit(call, tg_id):
 		}
 
 		markup = InlineKeyboardMarkup(row_width=2)
-		btn_is_admin = InlineKeyboardButton('Toggle: is admin',
-		                                    callback_data=build_callback('toggle_is_admin', selected_user.tg_id))
-		btn_is_interviewer = InlineKeyboardButton('Toggle: is interviewer',
-		                                          callback_data=build_callback('toggle_is_interviewer',
-		                                                                       selected_user.tg_id))
+		btn_is_admin = InlineKeyboardButton(
+			'Toggle: is admin',
+			callback_data=build_callback('toggle_is_admin', selected_user.tg_id)
+		)
+		btn_is_interviewer = InlineKeyboardButton(
+			'Toggle: is interviewer',
+			callback_data=build_callback('toggle_is_interviewer', selected_user.tg_id)
+		)
 		markup.add(btn_is_admin, btn_is_interviewer)
-		btn_assign_to_projects = InlineKeyboardButton('Assign to projects',
-		                                              callback_data=build_callback('assign_to_projects',
-		                                                                           selected_user.tg_id))
+		btn_assign_to_projects = InlineKeyboardButton(
+			'Assign to projects',
+			callback_data=build_callback('assign_to_projects', selected_user.tg_id)
+		)
 		markup.add(btn_assign_to_projects)
 		# btn_assign_admin = InlineKeyboardButton('Assign as admin', callback_data=build_callback('assign_admin', selected_user.tg_id))
 		# markup.add(btn_assign_admin)
@@ -150,7 +153,7 @@ def handle_assign_to_projects(call, tg_id):
 	for i in projects:
 		btn_project = InlineKeyboardButton(
 			f'{repr(i)} [tap to edit]',
-			callback_data=build_callback('handle_project_edit', i.id)
+			callback_data=build_callback('project_edit', i.id)
 		)
 		btn_interviewer = InlineKeyboardButton(
 			'as interviewer',
@@ -185,15 +188,15 @@ def handle_assign_admin_to_project(call, tg_id, project_id):
 	session = Session()
 	selected_user = session.query(User).filter(User.tg_id == tg_id).first()
 	selected_project = session.query(Questionnaire).filter(Questionnaire.id == project_id).first()
-	if selected_project in selected_user.admin_of_projects:
-		selected_user.admin_of_projects.remove(selected_project)
+	if selected_user in selected_project.project_admins:
+		selected_project.project_admins.remove(selected_user)
 		bot.answer_callback_query(call.id, f'{selected_user} is NOT an admin in {selected_project}')
 		bot.send_message(call.message.chat.id, f'{selected_user} is NOT an admin in {selected_project}')
 	else:
-		selected_user.admin_of_projects.append(selected_project)
+		selected_project.project_admins.append(selected_user)
 		bot.answer_callback_query(call.id, f'{selected_user} IS an admin in {selected_project}')
 		bot.send_message(call.message.chat.id, f'{selected_user} IS an admin in {selected_project}')
-	session.add(selected_user)
+	session.add(selected_project)
 	session.commit()
 
 
@@ -206,13 +209,15 @@ def handle_project_edit(call, project_id):
 	user = get_user(call, session=session)
 	selected_project = session.query(Questionnaire).filter(Questionnaire.id == project_id).first()
 	if user.is_admin or user.is_root or user in selected_project.project_admins:
-		# list_display = lambda iterable: '[\n\t' + ",\n\t".join([repr(i) for i in iterable]) + '\n]'
+		list_display = lambda iterable: '[\n\t' + ",\n\t".join([repr(i) for i in iterable]) + '\n]'
 		fields = {
 			'name': selected_project.name,
 			'description': selected_project.description,
 			'version': selected_project.version,
 			'is active': selected_project.is_active,
 			'created by': repr(selected_project.created_by),
+			'admins': list_display(selected_project.project_users),
+			'interviewers': list_display(selected_project.project_admins),
 		}
 
 		markup = InlineKeyboardMarkup(row_width=2)
@@ -243,13 +248,15 @@ def handle_toggle_is_active(call, project_id):
 
 
 def handle_assign_users(call, project_id):
+	print('handle_assign_users', 'start', project_id)
 	session = Session()
 	users = session.query(User).all()
 	markup = InlineKeyboardMarkup()
 	for i in users:
+		print(i)
 		btn_user = InlineKeyboardButton(
 			f'{repr(i)} [tap to edit]',
-			callback_data=build_callback('handle_user_edit', i.id)
+			callback_data=build_callback('user_edit', i.tg_id)
 		)
 		btn_interviewer = InlineKeyboardButton(
 			'as interviewer',

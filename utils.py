@@ -12,14 +12,14 @@ def get_unique_file_name(directory, extension, uuid_length=8):
 
 
 def get_distance(lat1, lon1, lat2=55.751244, lon2=37.618423):
-	earth_radius = 6371
-	delta_lat = math.radians(lat2 - lat1)
-	delta_lon = math.radians(lon2 - lon1)
+	# Haversine formula
+	lon1, lat1, lon2, lat2 = map(math.radians, [lon1, lat1, lon2, lat2])
+	delta_lon = lon2 - lon1
+	delta_lat = lat2 - lat1
 	ssq_delta_lat = math.pow(math.sin(delta_lat / 2), 2)
 	ssq_delta_lon = math.pow(math.sin(delta_lon / 2), 2)
-	a = ssq_delta_lat + math.cos(math.radians(lat1)) * math.cos(math.radians(lat2)) * ssq_delta_lon
-	# c = math.atan2(math.sqrt(a), math.sqrt(1-a))
-	# print('c1 ', c)
-	c = math.asin(math.sqrt(a))
-	# print('c2 ', c)
+	# a = math.sin(delta_lat / 2) ** 2 + math.cos(lat1) * math.cos(lat2) * math.sin(delta_lon / 2) ** 2
+	a = ssq_delta_lat + math.cos(lat1) * math.cos(lat2) * ssq_delta_lon
+	c = 2 * math.asin(math.sqrt(a))
+	earth_radius = 6371  # 3956 miles
 	return earth_radius * c

@@ -274,7 +274,7 @@ class User(Base):
 			'tg_id': self.tg_id,
 			'status': ', '.join(status)
 		}
-		return '<User({status}) {first_name} {last_name} id: {tg_id}>'.format(**d)
+		return '<{first_name} {last_name} ({status}) id: {tg_id}>'.format(**d)
 
 
 def recreate_all(session=None):
